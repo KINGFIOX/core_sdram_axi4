@@ -162,6 +162,10 @@ int sc_main(int argc, char* argv[])
     tb->set_testcase(testcase);
     tb->set_argcv(argc - last_argc, &argv[last_argc]);
 
+    // Complete elaboration before enabling tracing (required by SystemC 3.x)
+    sc_start(SC_ZERO_TIME);
+    tb->init_trace();
+
     // Go!
     sc_start();
 

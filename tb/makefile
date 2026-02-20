@@ -1,11 +1,13 @@
 ###############################################################################
 ## Tool paths
 ###############################################################################
-VERILATOR_SRC ?= /usr/share/verilator/include
-SYSTEMC_HOME  ?= /usr/local/systemc-2.3.1
+VERILATOR_SRC  ?= /usr/share/verilator/include
+SYSTEMC_HOME   ?= /usr/local/systemc-2.3.1
+SYSTEMC_LIBDIR ?= $(SYSTEMC_HOME)/lib-linux64
 
 export VERILATOR_SRC
 export SYSTEMC_HOME
+export SYSTEMC_LIBDIR
 
 ###############################################################################
 ## Makefile

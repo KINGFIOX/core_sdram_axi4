@@ -1,8 +1,10 @@
 ###############################################################################
 # Variables
 ###############################################################################
-VERILATOR_SRC ?= /usr/share/verilator/include
-SYSTEMC_HOME  ?= /usr/local/systemc-2.3.1
+CXX            ?= g++
+VERILATOR_SRC  ?= /usr/share/verilator/include
+SYSTEMC_HOME   ?= /usr/local/systemc-2.3.1
+SYSTEMC_LIBDIR ?= $(SYSTEMC_HOME)/lib-linux64
 
 OBJ_DIR      ?= obj/
 EXE_DIR      ?= build/
@@ -28,7 +30,7 @@ CFLAGS       ?= -fpic -O2
 CFLAGS       += $(patsubst %,-I%,$(INCLUDE_PATH))
 CFLAGS       += -DVM_TRACE=1
 LDFLAGS      ?= -O2
-LDFLAGS      += -L$(SYSTEMC_HOME)/lib-linux64 
+LDFLAGS      += -L$(SYSTEMC_LIBDIR) 
 LDFLAGS      += $(patsubst %,-L%,$(LIB_PATH))
 
 EXTRA_CLEAN_FILES ?=
@@ -43,7 +45,7 @@ OBJ          ?= $(foreach src,$(SRC),$(call src2obj,$(src)))
 ###############################################################################
 define template_c
 $(call src2obj,$(1)): $(1) | $(OBJ_DIR)
-	g++ $(CFLAGS) -c $$< -o $$@
+	$(CXX) $(CFLAGS) -c $$< -o $$@
 endef
 
 all: $(EXE_DIR)$(TARGET)
@@ -54,7 +56,7 @@ $(OBJ_DIR) $(EXE_DIR):
 $(foreach src,$(SRC),$(eval $(call template_c,$(src))))
 
 $(EXE_DIR)$(TARGET): $(OBJ) | $(EXE_DIR) 
-	g++ $(LDFLAGS) $(OBJ) -o $@ -lsystemc $(LIBS)
+	$(CXX) $(LDFLAGS) $(OBJ) -o $@ -lsystemc $(LIBS)
 
 clean:
 	rm -rf $(EXE_DIR) $(OBJ_DIR) $(EXTRA_CLEAN_FILES)

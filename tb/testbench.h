@@ -56,6 +56,11 @@ public:
         sc_stop();
     }
 
+    void init_trace(void)
+    {
+        verilator_trace_enable("verilator.vcd", m_dut);
+    }
+
     SC_HAS_PROCESS(testbench);
     testbench(sc_module_name name): testbench_vbase(name)
     {    
@@ -80,7 +85,5 @@ public:
         m_mem->rst_in(rst);
         m_mem->sdram_in(sdram_io_m);
         m_mem->sdram_out(sdram_io_s);
-
-        verilator_trace_enable("verilator.vcd", m_dut);
     }
 };

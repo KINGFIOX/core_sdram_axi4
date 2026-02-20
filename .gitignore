@@ -1,0 +1,18 @@
+# Nix
+.nix-systemc/
+result
+
+# Build artifacts
+tb/verilated/
+tb/obj_verilated/
+tb/obj/
+tb/lib/
+tb/build/
+tb/*.vcd
+
+# direnv
+.direnv
+
+# clangd
+compile_commands.json
+.cache

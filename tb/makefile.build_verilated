@@ -1,8 +1,10 @@
 ###############################################################################
 # Variables
 ###############################################################################
-VERILATOR_SRC ?= /usr/share/verilator/include
-SYSTEMC_HOME  ?= /usr/local/systemc-2.3.1
+CXX            ?= g++
+VERILATOR_SRC  ?= /usr/share/verilator/include
+SYSTEMC_HOME   ?= /usr/local/systemc-2.3.1
+SYSTEMC_LIBDIR ?= $(SYSTEMC_HOME)/lib-linux64
 
 SRC_DIR       ?= verilated/
 OBJ_DIR       ?= obj_verilated/
@@ -24,7 +26,7 @@ CFLAGS       += -fpic
 CFLAGS       += $(patsubst %,-I%,$(INCLUDE_PATH))
 CFLAGS       += $(EXTRA_CFLAGS)
 
-LIB_OPT      ?= $(SYSTEMC_HOME)/lib-linux64/libsystemc.a
+LIB_OPT      ?= -L$(SYSTEMC_LIBDIR) -lsystemc
 
 # SRC / Object list
 src2obj       = $(OBJ_DIR)$(patsubst %$(suffix $(1)),%.o,$(notdir $(1)))
@@ -32,6 +34,7 @@ SRC_LIST      = $(foreach src,$(SRC_DIR),$(wildcard $(src)/*.cpp))
 SRC_LIST     += $(VERILATOR_SRC)/verilated.cpp
 SRC_LIST     += $(VERILATOR_SRC)/verilated_vcd_c.cpp
 SRC_LIST     += $(VERILATOR_SRC)/verilated_vcd_sc.cpp
+SRC_LIST     += $(VERILATOR_SRC)/verilated_threads.cpp
 
 OBJ          ?= $(foreach src,$(SRC_LIST),$(call src2obj,$(src)))
 
@@ -40,7 +43,7 @@ OBJ          ?= $(foreach src,$(SRC_LIST),$(call src2obj,$(src)))
 ###############################################################################
 define template_c
 $(call src2obj,$(1)): $(1) | $(OBJ_DIR)
-	g++ $(CFLAGS) -c $$< -o $$@
+	$(CXX) $(CFLAGS) -c $$< -o $$@
 endef
 
 all: $(LIB_DIR)$(LIBNAME)
@@ -51,7 +54,7 @@ $(OBJ_DIR) $(LIB_DIR):
 $(foreach src,$(SRC_LIST),$(eval $(call template_c,$(src))))
 
 $(LIB_DIR)$(LIBNAME): $(OBJ) | $(LIB_DIR) 
-	g++ -shared -o $(LIB_DIR)$(LIBNAME) $(LIB_OPT) $(OBJ)
+	$(CXX) -shared -o $(LIB_DIR)$(LIBNAME) $(LIB_OPT) $(OBJ)
 
 clean:
 	rm -rf $(LIB_DIR) $(OBJ_DIR)
