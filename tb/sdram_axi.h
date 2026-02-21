@@ -6,7 +6,7 @@
 #include "axi4.h"
 #include "sdram_io.h"
 
-class Vsdram_axi;
+class VSDRAMSimTop;
 class VerilatedVcdSc;
 
 //-------------------------------------------------------------
@@ -56,49 +56,70 @@ public:
 private:
   sc_signal<bool> m_clk_in;
   sc_signal<bool> m_rst_in;
-  sc_signal<bool> m_inport_awvalid_in;
-  sc_signal<sc_uint<32>> m_inport_awaddr_in;
-  sc_signal<sc_uint<4>> m_inport_awid_in;
-  sc_signal<sc_uint<8>> m_inport_awlen_in;
-  sc_signal<sc_uint<2>> m_inport_awburst_in;
-  sc_signal<bool> m_inport_wvalid_in;
-  sc_signal<sc_uint<32>> m_inport_wdata_in;
-  sc_signal<sc_uint<4>> m_inport_wstrb_in;
-  sc_signal<bool> m_inport_wlast_in;
-  sc_signal<bool> m_inport_bready_in;
-  sc_signal<bool> m_inport_arvalid_in;
-  sc_signal<sc_uint<32>> m_inport_araddr_in;
-  sc_signal<sc_uint<4>> m_inport_arid_in;
-  sc_signal<sc_uint<8>> m_inport_arlen_in;
-  sc_signal<sc_uint<2>> m_inport_arburst_in;
-  sc_signal<bool> m_inport_rready_in;
-  sc_signal<sc_uint<16>> m_sdram_data_input_in;
 
-  sc_signal<bool> m_inport_awready_out;
-  sc_signal<bool> m_inport_wready_out;
-  sc_signal<bool> m_inport_bvalid_out;
-  sc_signal<sc_uint<2>> m_inport_bresp_out;
-  sc_signal<sc_uint<4>> m_inport_bid_out;
-  sc_signal<bool> m_inport_arready_out;
-  sc_signal<bool> m_inport_rvalid_out;
-  sc_signal<sc_uint<32>> m_inport_rdata_out;
-  sc_signal<sc_uint<2>> m_inport_rresp_out;
-  sc_signal<sc_uint<4>> m_inport_rid_out;
-  sc_signal<bool> m_inport_rlast_out;
-  sc_signal<bool> m_sdram_clk_out;
-  sc_signal<bool> m_sdram_cke_out;
-  sc_signal<bool> m_sdram_cs_out;
-  sc_signal<bool> m_sdram_ras_out;
-  sc_signal<bool> m_sdram_cas_out;
-  sc_signal<bool> m_sdram_we_out;
-  sc_signal<sc_uint<2>> m_sdram_dqm_out;
-  sc_signal<sc_uint<13>> m_sdram_addr_out;
-  sc_signal<sc_uint<2>> m_sdram_ba_out;
-  sc_signal<sc_uint<16>> m_sdram_data_output_out;
-  sc_signal<bool> m_sdram_data_out_en_out;
+  // AW channel
+  sc_signal<bool> m_in_aw_valid;
+  sc_signal<sc_uint<32>> m_in_aw_bits_addr;
+  sc_signal<sc_uint<4>> m_in_aw_bits_id;
+  sc_signal<sc_uint<8>> m_in_aw_bits_len;
+  sc_signal<sc_uint<3>> m_in_aw_bits_size;
+  sc_signal<sc_uint<2>> m_in_aw_bits_burst;
+
+  // W channel
+  sc_signal<bool> m_in_w_valid;
+  sc_signal<sc_uint<32>> m_in_w_bits_data;
+  sc_signal<sc_uint<4>> m_in_w_bits_strb;
+  sc_signal<bool> m_in_w_bits_last;
+
+  // B channel
+  sc_signal<bool> m_in_b_ready;
+
+  // AR channel
+  sc_signal<bool> m_in_ar_valid;
+  sc_signal<sc_uint<32>> m_in_ar_bits_addr;
+  sc_signal<sc_uint<4>> m_in_ar_bits_id;
+  sc_signal<sc_uint<8>> m_in_ar_bits_len;
+  sc_signal<sc_uint<3>> m_in_ar_bits_size;
+  sc_signal<sc_uint<2>> m_in_ar_bits_burst;
+
+  // R channel
+  sc_signal<bool> m_in_r_ready;
+
+  // SDRAM input
+  sc_signal<sc_uint<16>> m_sdram_data_input;
+
+  // Outputs: AW ready
+  sc_signal<bool> m_in_aw_ready;
+  // W ready
+  sc_signal<bool> m_in_w_ready;
+  // B channel
+  sc_signal<bool> m_in_b_valid;
+  sc_signal<sc_uint<2>> m_in_b_bits_resp;
+  sc_signal<sc_uint<4>> m_in_b_bits_id;
+  // AR ready
+  sc_signal<bool> m_in_ar_ready;
+  // R channel
+  sc_signal<bool> m_in_r_valid;
+  sc_signal<sc_uint<32>> m_in_r_bits_data;
+  sc_signal<sc_uint<2>> m_in_r_bits_resp;
+  sc_signal<sc_uint<4>> m_in_r_bits_id;
+  sc_signal<bool> m_in_r_bits_last;
+
+  // SDRAM outputs
+  sc_signal<bool> m_sdram_clk;
+  sc_signal<bool> m_sdram_cke;
+  sc_signal<bool> m_sdram_cs;
+  sc_signal<bool> m_sdram_ras;
+  sc_signal<bool> m_sdram_cas;
+  sc_signal<bool> m_sdram_we;
+  sc_signal<sc_uint<2>> m_sdram_dqm;
+  sc_signal<sc_uint<13>> m_sdram_addr;
+  sc_signal<sc_uint<2>> m_sdram_ba;
+  sc_signal<sc_uint<16>> m_sdram_data_output;
+  sc_signal<bool> m_sdram_data_out_en;
 
 public:
-  Vsdram_axi *m_rtl;
+  VSDRAMSimTop *m_rtl;
 #if VM_TRACE
   VerilatedVcdSc *m_vcd;
   bool m_delay_waves;

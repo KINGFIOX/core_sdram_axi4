@@ -2,6 +2,12 @@
 .nix-systemc/
 result
 
+# Mill / Chisel build
+build/
+out/
+.metals
+.bsp
+
 # Build artifacts
 tb/verilated/
 tb/obj_verilated/
@@ -10,8 +16,12 @@ tb/lib/
 tb/build/
 tb/*.vcd
 
+# GDB
+.gdb-dashboard
+
 # direnv
 .direnv
+.vscode
 
 # clangd
 compile_commands.json

@@ -1,17 +1,10 @@
 ###############################################################################
 # Variables
 ###############################################################################
-CORE             ?= core
-PARAMS           ?= 
 OUTPUT_DIR       ?= verilated
-SRC_DIR          ?= ../src_v
-SRC_TYPE         ?= v
+RTL_DIR          ?= ../build/rtl
 SRC_V_DIR        ?= ../src_v
-OUTPUT_SUFFIX    ?=
-SRC              ?= sdram_axi
-NAME             ?= sdram_axi
-
-RTL_INCLUDE       = 
+NAME             ?= SDRAMSimTop
 
 # Verilator options
 VERILATE_PARAMS  ?= --trace
@@ -27,8 +20,12 @@ all: $(TARGETS)
 $(OUTPUT_DIR):
 	mkdir -p $@
 
-$(OUTPUT_DIR)/V$(NAME): $(SRC_DIR)/$(SRC).$(SRC_TYPE) | $(OUTPUT_DIR)
-	verilator --sc $(patsubst $(OUTPUT_DIR)/V$(NAME), $(SRC_V_DIR)/$(NAME), $@) --Mdir $(OUTPUT_DIR) -I./$(SRC_V_DIR) $(patsubst %,-I%,$(RTL_INCLUDE)) $(VERILATOR_OPTS) $(VERILATE_PARAMS)
+$(OUTPUT_DIR)/V$(NAME): $(RTL_DIR)/$(NAME).sv | $(OUTPUT_DIR)
+	verilator --sc \
+		$(RTL_DIR)/$(NAME).sv \
+		--top $(NAME) \
+		--Mdir $(OUTPUT_DIR) \
+		$(VERILATOR_OPTS) $(VERILATE_PARAMS)
 
 clean:
 	rm -rf $(TARGETS) $(OUTPUT_DIR)

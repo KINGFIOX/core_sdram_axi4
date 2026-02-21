@@ -1,6 +1,6 @@
 
 #include "sdram_axi.h"
-#include "Vsdram_axi.h"
+#include "VSDRAMSimTop.h"
 
 #if VM_TRACE
 #include "verilated.h"
@@ -11,76 +11,91 @@
 // Constructor
 //-------------------------------------------------------------
 sdram_axi::sdram_axi(sc_module_name name) : sc_module(name) {
-  m_rtl = new Vsdram_axi("Vsdram_axi");
-  m_rtl->clk_i(m_clk_in);
-  m_rtl->rst_i(m_rst_in);
-  m_rtl->inport_awvalid_i(m_inport_awvalid_in);
-  m_rtl->inport_awaddr_i(m_inport_awaddr_in);
-  m_rtl->inport_awid_i(m_inport_awid_in);
-  m_rtl->inport_awlen_i(m_inport_awlen_in);
-  m_rtl->inport_awburst_i(m_inport_awburst_in);
-  m_rtl->inport_wvalid_i(m_inport_wvalid_in);
-  m_rtl->inport_wdata_i(m_inport_wdata_in);
-  m_rtl->inport_wstrb_i(m_inport_wstrb_in);
-  m_rtl->inport_wlast_i(m_inport_wlast_in);
-  m_rtl->inport_bready_i(m_inport_bready_in);
-  m_rtl->inport_arvalid_i(m_inport_arvalid_in);
-  m_rtl->inport_araddr_i(m_inport_araddr_in);
-  m_rtl->inport_arid_i(m_inport_arid_in);
-  m_rtl->inport_arlen_i(m_inport_arlen_in);
-  m_rtl->inport_arburst_i(m_inport_arburst_in);
-  m_rtl->inport_rready_i(m_inport_rready_in);
-  m_rtl->sdram_data_input_i(m_sdram_data_input_in);
-  m_rtl->inport_awready_o(m_inport_awready_out);
-  m_rtl->inport_wready_o(m_inport_wready_out);
-  m_rtl->inport_bvalid_o(m_inport_bvalid_out);
-  m_rtl->inport_bresp_o(m_inport_bresp_out);
-  m_rtl->inport_bid_o(m_inport_bid_out);
-  m_rtl->inport_arready_o(m_inport_arready_out);
-  m_rtl->inport_rvalid_o(m_inport_rvalid_out);
-  m_rtl->inport_rdata_o(m_inport_rdata_out);
-  m_rtl->inport_rresp_o(m_inport_rresp_out);
-  m_rtl->inport_rid_o(m_inport_rid_out);
-  m_rtl->inport_rlast_o(m_inport_rlast_out);
-  m_rtl->sdram_clk_o(m_sdram_clk_out);
-  m_rtl->sdram_cke_o(m_sdram_cke_out);
-  m_rtl->sdram_cs_o(m_sdram_cs_out);
-  m_rtl->sdram_ras_o(m_sdram_ras_out);
-  m_rtl->sdram_cas_o(m_sdram_cas_out);
-  m_rtl->sdram_we_o(m_sdram_we_out);
-  m_rtl->sdram_dqm_o(m_sdram_dqm_out);
-  m_rtl->sdram_addr_o(m_sdram_addr_out);
-  m_rtl->sdram_ba_o(m_sdram_ba_out);
-  m_rtl->sdram_data_output_o(m_sdram_data_output_out);
-  m_rtl->sdram_data_out_en_o(m_sdram_data_out_en_out);
+  m_rtl = new VSDRAMSimTop("VSDRAMSimTop");
+
+  m_rtl->clock(m_clk_in);
+  m_rtl->reset(m_rst_in);
+
+  // AW channel
+  m_rtl->in_aw_valid(m_in_aw_valid);
+  m_rtl->in_aw_bits_addr(m_in_aw_bits_addr);
+  m_rtl->in_aw_bits_id(m_in_aw_bits_id);
+  m_rtl->in_aw_bits_len(m_in_aw_bits_len);
+  m_rtl->in_aw_bits_size(m_in_aw_bits_size);
+  m_rtl->in_aw_bits_burst(m_in_aw_bits_burst);
+  m_rtl->in_aw_ready(m_in_aw_ready);
+
+  // W channel
+  m_rtl->in_w_valid(m_in_w_valid);
+  m_rtl->in_w_bits_data(m_in_w_bits_data);
+  m_rtl->in_w_bits_strb(m_in_w_bits_strb);
+  m_rtl->in_w_bits_last(m_in_w_bits_last);
+  m_rtl->in_w_ready(m_in_w_ready);
+
+  // B channel
+  m_rtl->in_b_ready(m_in_b_ready);
+  m_rtl->in_b_valid(m_in_b_valid);
+  m_rtl->in_b_bits_resp(m_in_b_bits_resp);
+  m_rtl->in_b_bits_id(m_in_b_bits_id);
+
+  // AR channel
+  m_rtl->in_ar_valid(m_in_ar_valid);
+  m_rtl->in_ar_bits_addr(m_in_ar_bits_addr);
+  m_rtl->in_ar_bits_id(m_in_ar_bits_id);
+  m_rtl->in_ar_bits_len(m_in_ar_bits_len);
+  m_rtl->in_ar_bits_size(m_in_ar_bits_size);
+  m_rtl->in_ar_bits_burst(m_in_ar_bits_burst);
+  m_rtl->in_ar_ready(m_in_ar_ready);
+
+  // R channel
+  m_rtl->in_r_ready(m_in_r_ready);
+  m_rtl->in_r_valid(m_in_r_valid);
+  m_rtl->in_r_bits_data(m_in_r_bits_data);
+  m_rtl->in_r_bits_resp(m_in_r_bits_resp);
+  m_rtl->in_r_bits_id(m_in_r_bits_id);
+  m_rtl->in_r_bits_last(m_in_r_bits_last);
+
+  // SDRAM
+  m_rtl->sdram_clk(m_sdram_clk);
+  m_rtl->sdram_cke(m_sdram_cke);
+  m_rtl->sdram_cs(m_sdram_cs);
+  m_rtl->sdram_ras(m_sdram_ras);
+  m_rtl->sdram_cas(m_sdram_cas);
+  m_rtl->sdram_we(m_sdram_we);
+  m_rtl->sdram_dqm(m_sdram_dqm);
+  m_rtl->sdram_addr(m_sdram_addr);
+  m_rtl->sdram_ba(m_sdram_ba);
+  m_rtl->sdram_data_output(m_sdram_data_output);
+  m_rtl->sdram_data_out_en(m_sdram_data_out_en);
+  m_rtl->sdram_data_input(m_sdram_data_input);
 
   SC_METHOD(async_outputs);
   sensitive << clk_in;
   sensitive << rst_in;
   sensitive << inport_in;
   sensitive << sdram_in;
-  sensitive << m_inport_awready_out;
-  sensitive << m_inport_wready_out;
-  sensitive << m_inport_bvalid_out;
-  sensitive << m_inport_bresp_out;
-  sensitive << m_inport_bid_out;
-  sensitive << m_inport_arready_out;
-  sensitive << m_inport_rvalid_out;
-  sensitive << m_inport_rdata_out;
-  sensitive << m_inport_rresp_out;
-  sensitive << m_inport_rid_out;
-  sensitive << m_inport_rlast_out;
-  sensitive << m_sdram_clk_out;
-  sensitive << m_sdram_cke_out;
-  sensitive << m_sdram_cs_out;
-  sensitive << m_sdram_ras_out;
-  sensitive << m_sdram_cas_out;
-  sensitive << m_sdram_we_out;
-  sensitive << m_sdram_dqm_out;
-  sensitive << m_sdram_addr_out;
-  sensitive << m_sdram_ba_out;
-  sensitive << m_sdram_data_output_out;
-  sensitive << m_sdram_data_out_en_out;
+  sensitive << m_in_aw_ready;
+  sensitive << m_in_w_ready;
+  sensitive << m_in_b_valid;
+  sensitive << m_in_b_bits_resp;
+  sensitive << m_in_b_bits_id;
+  sensitive << m_in_ar_ready;
+  sensitive << m_in_r_valid;
+  sensitive << m_in_r_bits_data;
+  sensitive << m_in_r_bits_resp;
+  sensitive << m_in_r_bits_id;
+  sensitive << m_in_r_bits_last;
+  sensitive << m_sdram_clk;
+  sensitive << m_sdram_cke;
+  sensitive << m_sdram_cs;
+  sensitive << m_sdram_ras;
+  sensitive << m_sdram_cas;
+  sensitive << m_sdram_we;
+  sensitive << m_sdram_dqm;
+  sensitive << m_sdram_addr;
+  sensitive << m_sdram_ba;
+  sensitive << m_sdram_data_output;
+  sensitive << m_sdram_data_out_en;
 
 #if VM_TRACE
   m_vcd = NULL;
@@ -101,7 +116,6 @@ void sdram_axi::trace_enable(VerilatedVcdSc *p, sc_core::sc_time start_time) {
   m_vcd = p;
   m_delay_waves = true;
   m_waves_start = start_time;
-  // m_rtl->trace (m_vcd, 99);
 #endif
 }
 //-------------------------------------------------------------
@@ -112,50 +126,64 @@ void sdram_axi::async_outputs(void) {
   m_rst_in.write(rst_in.read());
 
   axi4_master inport_i = inport_in.read();
-  m_inport_awvalid_in.write(inport_i.AWVALID);
-  m_inport_awaddr_in.write(inport_i.AWADDR);
-  m_inport_awid_in.write(inport_i.AWID);
-  m_inport_awlen_in.write(inport_i.AWLEN);
-  m_inport_awburst_in.write(inport_i.AWBURST);
-  m_inport_wvalid_in.write(inport_i.WVALID);
-  m_inport_wdata_in.write(inport_i.WDATA);
-  m_inport_wstrb_in.write(inport_i.WSTRB);
-  m_inport_wlast_in.write(inport_i.WLAST);
-  m_inport_bready_in.write(inport_i.BREADY);
-  m_inport_arvalid_in.write(inport_i.ARVALID);
-  m_inport_araddr_in.write(inport_i.ARADDR);
-  m_inport_arid_in.write(inport_i.ARID);
-  m_inport_arlen_in.write(inport_i.ARLEN);
-  m_inport_arburst_in.write(inport_i.ARBURST);
-  m_inport_rready_in.write(inport_i.RREADY);
 
+  // AW channel
+  m_in_aw_valid.write(inport_i.AWVALID);
+  m_in_aw_bits_addr.write(inport_i.AWADDR);
+  m_in_aw_bits_id.write(inport_i.AWID);
+  m_in_aw_bits_len.write(inport_i.AWLEN);
+  m_in_aw_bits_burst.write(inport_i.AWBURST);
+  m_in_aw_bits_size.write(2);
+  // W channel
+  m_in_w_valid.write(inport_i.WVALID);
+  m_in_w_bits_data.write(inport_i.WDATA);
+  m_in_w_bits_strb.write(inport_i.WSTRB);
+  m_in_w_bits_last.write(inport_i.WLAST);
+
+  // B channel
+  m_in_b_ready.write(inport_i.BREADY);
+
+  // AR channel
+  m_in_ar_valid.write(inport_i.ARVALID);
+  m_in_ar_bits_addr.write(inport_i.ARADDR);
+  m_in_ar_bits_id.write(inport_i.ARID);
+  m_in_ar_bits_len.write(inport_i.ARLEN);
+  m_in_ar_bits_burst.write(inport_i.ARBURST);
+  m_in_ar_bits_size.write(2);
+  // R channel
+  m_in_r_ready.write(inport_i.RREADY);
+
+  // AXI slave outputs
   axi4_slave inport_o;
-  inport_o.AWREADY = m_inport_awready_out.read();
-  inport_o.WREADY = m_inport_wready_out.read();
-  inport_o.BVALID = m_inport_bvalid_out.read();
-  inport_o.BRESP = m_inport_bresp_out.read();
-  inport_o.BID = m_inport_bid_out.read();
-  inport_o.ARREADY = m_inport_arready_out.read();
-  inport_o.RVALID = m_inport_rvalid_out.read();
-  inport_o.RDATA = m_inport_rdata_out.read();
-  inport_o.RRESP = m_inport_rresp_out.read();
-  inport_o.RID = m_inport_rid_out.read();
-  inport_o.RLAST = m_inport_rlast_out.read();
+  inport_o.AWREADY = m_in_aw_ready.read();
+  inport_o.WREADY = m_in_w_ready.read();
+  inport_o.BVALID = m_in_b_valid.read();
+  inport_o.BRESP = m_in_b_bits_resp.read();
+  inport_o.BID = m_in_b_bits_id.read();
+  inport_o.ARREADY = m_in_ar_ready.read();
+  inport_o.RVALID = m_in_r_valid.read();
+  inport_o.RDATA = m_in_r_bits_data.read();
+  inport_o.RRESP = m_in_r_bits_resp.read();
+  inport_o.RID = m_in_r_bits_id.read();
+  inport_o.RLAST = m_in_r_bits_last.read();
   inport_out.write(inport_o);
-  sdram_io_slave sdram_i = sdram_in.read();
-  m_sdram_data_input_in.write(sdram_i.DATA_INPUT);
 
+  // SDRAM input
+  sdram_io_slave sdram_i = sdram_in.read();
+  m_sdram_data_input.write(sdram_i.DATA_INPUT);
+
+  // SDRAM outputs
   sdram_io_master sdram_o;
-  sdram_o.CLK = m_sdram_clk_out.read();
-  sdram_o.CKE = m_sdram_cke_out.read();
-  sdram_o.CS = m_sdram_cs_out.read();
-  sdram_o.RAS = m_sdram_ras_out.read();
-  sdram_o.CAS = m_sdram_cas_out.read();
-  sdram_o.WE = m_sdram_we_out.read();
-  sdram_o.DQM = m_sdram_dqm_out.read();
-  sdram_o.ADDR = m_sdram_addr_out.read();
-  sdram_o.BA = m_sdram_ba_out.read();
-  sdram_o.DATA_OUTPUT = m_sdram_data_output_out.read();
-  sdram_o.DATA_OUT_EN = m_sdram_data_out_en_out.read();
+  sdram_o.CLK = m_sdram_clk.read();
+  sdram_o.CKE = m_sdram_cke.read();
+  sdram_o.CS = m_sdram_cs.read();
+  sdram_o.RAS = m_sdram_ras.read();
+  sdram_o.CAS = m_sdram_cas.read();
+  sdram_o.WE = m_sdram_we.read();
+  sdram_o.DQM = m_sdram_dqm.read();
+  sdram_o.ADDR = m_sdram_addr.read();
+  sdram_o.BA = m_sdram_ba.read();
+  sdram_o.DATA_OUTPUT = m_sdram_data_output.read();
+  sdram_o.DATA_OUT_EN = m_sdram_data_out_en.read();
   sdram_out.write(sdram_o);
 }
