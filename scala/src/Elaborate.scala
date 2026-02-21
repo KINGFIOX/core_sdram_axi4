@@ -1,4 +1,4 @@
-package org.chipsalliance.sdram
+package sdram
 
 object Elaborate extends App {
   val targetDir = if (args.length > 0) args(0) else "build/rtl"

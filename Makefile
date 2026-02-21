@@ -15,10 +15,10 @@ init:
 elaborate: $(RTL_DIR)/$(TOP).sv
 
 $(RTL_DIR)/$(TOP).sv: $(CHISEL_SRC) build.sc common.sc
-	mill -i scala.runMain org.chipsalliance.sdram.Elaborate $(CURDIR)/$(RTL_DIR)
+	mill -i scala.runMain sdram.Elaborate $(CURDIR)/$(RTL_DIR)
 
 clean:
-	rm -rf $(BUILD_DIR) out
+	rm -rf $(BUILD_DIR)
 
 idea:
 	mill -i mill.idea.GenIdea/idea

@@ -1,73 +1,52 @@
-package org.chipsalliance.sdram
+package sdram
 
 import chisel3._
 import chisel3.util._
-
-class AxiSlaveIO extends Bundle {
-  val awvalid = Input(Bool())
-  val awaddr  = Input(UInt(32.W))
-  val awid    = Input(UInt(4.W))
-  val awlen   = Input(UInt(8.W))
-  val awburst = Input(UInt(2.W))
-  val wvalid  = Input(Bool())
-  val wdata   = Input(UInt(32.W))
-  val wstrb   = Input(UInt(4.W))
-  val wlast   = Input(Bool())
-  val bready  = Input(Bool())
-  val arvalid = Input(Bool())
-  val araddr  = Input(UInt(32.W))
-  val arid    = Input(UInt(4.W))
-  val arlen   = Input(UInt(8.W))
-  val arburst = Input(UInt(2.W))
-  val rready  = Input(Bool())
-
-  val awready = Output(Bool())
-  val wready  = Output(Bool())
-  val bvalid  = Output(Bool())
-  val bresp   = Output(UInt(2.W))
-  val bid     = Output(UInt(4.W))
-  val arready = Output(Bool())
-  val rvalid  = Output(Bool())
-  val rdata   = Output(UInt(32.W))
-  val rresp   = Output(UInt(2.W))
-  val rid     = Output(UInt(4.W))
-  val rlast   = Output(Bool())
-}
+import freechips.rocketchip.amba.axi4._
 
 class RamIO extends Bundle {
-  val wr        = Output(UInt(4.W))
-  val rd        = Output(Bool())
-  val len       = Output(UInt(8.W))
-  val addr      = Output(UInt(32.W))
+  val wr = Output(UInt(4.W))
+  val rd = Output(Bool())
+  val len = Output(UInt(8.W))
+  val addr = Output(UInt(32.W))
   val writeData = Output(UInt(32.W))
-  val accept    = Input(Bool())
-  val ack       = Input(Bool())
-  val error     = Input(Bool())
-  val readData  = Input(UInt(32.W))
+  val accept = Input(Bool())
+  val ack = Input(Bool())
+  val error = Input(Bool())
+  val readData = Input(UInt(32.W))
 }
 
-class SdramAxiPmem extends Module {
+class SdramAxiPmem(axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBits = 32, dataBits = 32, idBits = 4)) extends Module {
   val io = IO(new Bundle {
-    val axi = new AxiSlaveIO
+    val axi = Flipped(new AXI4Bundle(axiParams))
     val ram = new RamIO
   })
 
-  // --- calculate_addr_next ---
   def calculateAddrNext(addr: UInt, axtype: UInt, axlen: UInt): UInt = {
     val result = WireDefault(addr + 4.U)
-    val mask   = WireDefault(0.U(32.W))
+    val mask = WireDefault(0.U(32.W))
 
     switch(axtype) {
-      is(0.U) { // FIXED
+      is(0.U) {
         result := addr
       }
-      is(2.U) { // WRAP
+      is(2.U) {
         switch(axlen) {
-          is(0.U)  { mask := "h03".U }
-          is(1.U)  { mask := "h07".U }
-          is(3.U)  { mask := "h0F".U }
-          is(7.U)  { mask := "h1F".U }
-          is(15.U) { mask := "h3F".U }
+          is(0.U) {
+            mask := "h03".U
+          }
+          is(1.U) {
+            mask := "h07".U
+          }
+          is(3.U) {
+            mask := "h0F".U
+          }
+          is(7.U) {
+            mask := "h1F".U
+          }
+          is(15.U) {
+            mask := "h3F".U
+          }
         }
         when(axtype === 2.U) {
           result := (addr & ~mask) | ((addr + 4.U) & mask)
@@ -78,20 +57,19 @@ class SdramAxiPmem extends Module {
   }
 
   // --- Registers ---
-  val reqLenQ     = RegInit(0.U(8.W))
-  val reqAddrQ    = RegInit(0.U(32.W))
-  val reqRdQ      = RegInit(false.B)
-  val reqWrQ      = RegInit(false.B)
-  val reqIdQ      = RegInit(0.U(4.W))
+  val reqLenQ = RegInit(0.U(8.W))
+  val reqAddrQ = RegInit(0.U(32.W))
+  val reqRdQ = RegInit(false.B)
+  val reqWrQ = RegInit(false.B)
+  val reqIdQ = RegInit(0.U(4.W))
   val reqAxburstQ = RegInit(0.U(2.W))
-  val reqAxlenQ   = RegInit(0.U(8.W))
-  val reqPrioQ    = RegInit(false.B)
-  val reqHoldRdQ  = RegInit(false.B)
-  val reqHoldWrQ  = RegInit(false.B)
+  val reqAxlenQ = RegInit(0.U(8.W))
+  val reqPrioQ = RegInit(false.B)
+  val reqHoldRdQ = RegInit(false.B)
+  val reqHoldWrQ = RegInit(false.B)
 
-  // Forward-declare wires that participate in combinational loops
-  val ramWrO  = Wire(UInt(4.W))
-  val ramRdO  = Wire(Bool())
+  val ramWrO = Wire(UInt(4.W))
+  val ramRdO = Wire(Bool())
 
   // --- Request tracking FIFO ---
   val reqFifo = Module(new SdramAxiPmemFifo(width = 6))
@@ -102,32 +80,30 @@ class SdramAxiPmem extends Module {
 
   // --- Priority arbitration ---
   val writePrioW = (reqPrioQ && !reqHoldRdQ) || reqHoldWrQ
-  val readPrioW  = (!reqPrioQ && !reqHoldWrQ) || reqHoldRdQ
+  val readPrioW = (!reqPrioQ && !reqHoldWrQ) || reqHoldRdQ
 
-  val writeActiveW = (io.axi.awvalid || reqWrQ) && !reqRdQ && reqFifoAcceptW &&
-    (writePrioW || reqWrQ || !io.axi.arvalid)
-  val readActiveW = (io.axi.arvalid || reqRdQ) && !reqWrQ && reqFifoAcceptW &&
-    (readPrioW || reqRdQ || !io.axi.awvalid)
+  val writeActiveW = (io.axi.aw.valid || reqWrQ) && !reqRdQ && reqFifoAcceptW && (writePrioW || reqWrQ || !io.axi.ar.valid)
+  val readActiveW = (io.axi.ar.valid || reqRdQ) && !reqWrQ && reqFifoAcceptW && (readPrioW || reqRdQ || !io.axi.aw.valid)
 
-  io.axi.awready := writeActiveW && !reqWrQ && io.ram.accept && reqFifoAcceptW
-  io.axi.wready  := writeActiveW && io.ram.accept && reqFifoAcceptW
-  io.axi.arready := readActiveW && !reqRdQ && io.ram.accept && reqFifoAcceptW
+  io.axi.aw.ready := writeActiveW && !reqWrQ && io.ram.accept && reqFifoAcceptW
+  io.axi.w.ready := writeActiveW && io.ram.accept && reqFifoAcceptW
+  io.axi.ar.ready := readActiveW && !reqRdQ && io.ram.accept && reqFifoAcceptW
 
   val addrW = Mux(reqWrQ || reqRdQ, reqAddrQ,
-    Mux(writeActiveW, io.axi.awaddr, io.axi.araddr))
+    Mux(writeActiveW, io.axi.aw.bits.addr, io.axi.ar.bits.addr))
 
-  val wrW = writeActiveW && io.axi.wvalid
+  val wrW = writeActiveW && io.axi.w.valid
   val rdW = readActiveW
 
-  ramWrO := Mux(wrW, io.axi.wstrb, 0.U)
+  ramWrO := Mux(wrW, io.axi.w.bits.strb, 0.U)
   ramRdO := rdW
 
-  io.ram.addr      := addrW
-  io.ram.writeData := io.axi.wdata
-  io.ram.rd        := ramRdO
-  io.ram.wr        := ramWrO
-  io.ram.len       := Mux(io.axi.awvalid, io.axi.awlen,
-    Mux(io.axi.arvalid, io.axi.arlen, 0.U))
+  io.ram.addr := addrW
+  io.ram.writeData := io.axi.w.bits.data
+  io.ram.rd := ramRdO
+  io.ram.wr := ramWrO
+  io.ram.len := Mux(io.axi.aw.valid, io.axi.aw.bits.len,
+    Mux(io.axi.ar.valid, io.axi.ar.bits.len, 0.U))
 
   // --- Sequential: burst tracking ---
   when((ramWrO =/= 0.U || ramRdO) && io.ram.accept) {
@@ -136,35 +112,35 @@ class SdramAxiPmem extends Module {
       reqWrQ := false.B
     }.otherwise {
       reqAddrQ := calculateAddrNext(reqAddrQ, reqAxburstQ, reqAxlenQ)
-      reqLenQ  := reqLenQ - 1.U
+      reqLenQ := reqLenQ - 1.U
     }
   }
 
-  when(io.axi.awvalid && io.axi.awready) {
-    when(io.axi.wvalid && io.axi.wready) {
-      reqWrQ      := !io.axi.wlast
-      reqLenQ     := io.axi.awlen - 1.U
-      reqIdQ      := io.axi.awid
-      reqAxburstQ := io.axi.awburst
-      reqAxlenQ   := io.axi.awlen
-      reqAddrQ    := calculateAddrNext(io.axi.awaddr, io.axi.awburst, io.axi.awlen)
+  when(io.axi.aw.fire) {
+    when(io.axi.w.fire) {
+      reqWrQ := !io.axi.w.bits.last
+      reqLenQ := io.axi.aw.bits.len - 1.U
+      reqIdQ := io.axi.aw.bits.id
+      reqAxburstQ := io.axi.aw.bits.burst
+      reqAxlenQ := io.axi.aw.bits.len
+      reqAddrQ := calculateAddrNext(io.axi.aw.bits.addr, io.axi.aw.bits.burst, io.axi.aw.bits.len)
     }.otherwise {
-      reqWrQ      := true.B
-      reqLenQ     := io.axi.awlen
-      reqIdQ      := io.axi.awid
-      reqAxburstQ := io.axi.awburst
-      reqAxlenQ   := io.axi.awlen
-      reqAddrQ    := io.axi.awaddr
+      reqWrQ := true.B
+      reqLenQ := io.axi.aw.bits.len
+      reqIdQ := io.axi.aw.bits.id
+      reqAxburstQ := io.axi.aw.bits.burst
+      reqAxlenQ := io.axi.aw.bits.len
+      reqAddrQ := io.axi.aw.bits.addr
     }
     reqPrioQ := !reqPrioQ
-  }.elsewhen(io.axi.arvalid && io.axi.arready) {
-    reqRdQ      := io.axi.arlen =/= 0.U
-    reqLenQ     := io.axi.arlen - 1.U
-    reqAddrQ    := calculateAddrNext(io.axi.araddr, io.axi.arburst, io.axi.arlen)
-    reqIdQ      := io.axi.arid
-    reqAxburstQ := io.axi.arburst
-    reqAxlenQ   := io.axi.arlen
-    reqPrioQ    := !reqPrioQ
+  }.elsewhen(io.axi.ar.fire) {
+    reqRdQ := io.axi.ar.bits.len =/= 0.U
+    reqLenQ := io.axi.ar.bits.len - 1.U
+    reqAddrQ := calculateAddrNext(io.axi.ar.bits.addr, io.axi.ar.bits.burst, io.axi.ar.bits.len)
+    reqIdQ := io.axi.ar.bits.id
+    reqAxburstQ := io.axi.ar.bits.burst
+    reqAxlenQ := io.axi.ar.bits.len
+    reqPrioQ := !reqPrioQ
   }
 
   // --- Hold logic ---
@@ -185,45 +161,43 @@ class SdramAxiPmem extends Module {
 
   val reqInR = WireDefault(Cat(ramRdO, reqLenQ === 0.U, reqIdQ))
 
-  when(io.axi.arvalid && io.axi.arready) {
-    reqInR := Cat(1.U(1.W), io.axi.arlen === 0.U, io.axi.arid)
-  }.elsewhen(io.axi.awvalid && io.axi.awready) {
-    reqInR := Cat(0.U(1.W), io.axi.awlen === 0.U, io.axi.awid)
+  when(io.axi.ar.fire) {
+    reqInR := Cat(1.U(1.W), io.axi.ar.bits.len === 0.U, io.axi.ar.bits.id)
+  }.elsewhen(io.axi.aw.fire) {
+    reqInR := Cat(0.U(1.W), io.axi.aw.bits.len === 0.U, io.axi.aw.bits.id)
   }
 
   // --- Response accept ---
-  val reqOutW      = reqFifo.io.dataOut
+  val reqOutW = reqFifo.io.dataOut
   val reqOutValidW = reqFifo.io.valid
 
   val respIsWriteW = reqOutValidW && !reqOutW(5)
-  val respIsReadW  = reqOutValidW && reqOutW(5)
-  val respIsLastW  = reqOutW(4)
-  val respIdW      = reqOutW(3, 0)
+  val respIsReadW = reqOutValidW && reqOutW(5)
+  val respIsLastW = reqOutW(4)
+  val respIdW = reqOutW(3, 0)
 
   val respValidW = respFifo.io.valid
 
-  val respAcceptW = (io.axi.rvalid && io.axi.rready) ||
-    (io.axi.bvalid && io.axi.bready) ||
-    (respValidW && respIsWriteW && !respIsLastW)
+  val respAcceptW = io.axi.r.fire || io.axi.b.fire || (respValidW && respIsWriteW && !respIsLastW)
 
   // --- Wire up request FIFO ---
   reqFifo.io.dataIn := reqInR
-  reqFifo.io.push   := reqPushW
-  reqFifo.io.pop    := respAcceptW
+  reqFifo.io.push := reqPushW
+  reqFifo.io.pop := respAcceptW
 
   // --- Wire up response FIFO ---
   respFifo.io.dataIn := io.ram.readData
-  respFifo.io.push   := io.ram.ack
-  respFifo.io.pop    := respAcceptW
+  respFifo.io.push := io.ram.ack
+  respFifo.io.pop := respAcceptW
 
   // --- Response outputs ---
-  io.axi.bvalid := respValidW & respIsWriteW & respIsLastW
-  io.axi.bresp  := 0.U
-  io.axi.bid    := respIdW
+  io.axi.b.valid := respValidW & respIsWriteW & respIsLastW
+  io.axi.b.bits.resp := 0.U
+  io.axi.b.bits.id := respIdW
 
-  io.axi.rvalid := respValidW & respIsReadW
-  io.axi.rdata  := respFifo.io.dataOut
-  io.axi.rresp  := 0.U
-  io.axi.rid    := respIdW
-  io.axi.rlast  := respIsLastW
+  io.axi.r.valid := respValidW & respIsReadW
+  io.axi.r.bits.data := respFifo.io.dataOut
+  io.axi.r.bits.resp := 0.U
+  io.axi.r.bits.id := respIdW
+  io.axi.r.bits.last := respIsLastW
 }

@@ -37,10 +37,10 @@ clean:
 	-rm *.vcd
 
 run: build
-	./build/test.x --trace 1
+	./build/test.x --trace 1 --iterations 100
 
 gdb: debug
 	gdb -q -x $(GDB_DASHBOARD) -ex "set args $(GDB_ARGS)" ./build/test.x
 
 view:
-	gtkwave verilator.vcd gtksettings.sav
+	gtkwave verilator.vcd
