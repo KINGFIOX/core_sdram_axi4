@@ -2,7 +2,8 @@
 #include <queue>
 
 #define BURSTABLE(addr, length, burst_size)                                    \
-  (!(addr & (burst_size - 1)) && length >= burst_size)
+  (!(addr & (burst_size - 1)) /*一次 burst 的起始地址必须对齐*/ &&               \
+   length >= burst_size)
 
 typedef struct axi_resp_s {
   uint32_t addr;
@@ -25,6 +26,7 @@ void tb_axi4_driver::write_internal(uint32_t addr, uint8_t *data, int length,
   while (length > 0) {
     int chunk = 1;
 
+    // 优先级匹配, 一次突发传输尽可能多的数据
     if (BURSTABLE(addr, length, 32))
       chunk = 32;
     else if (BURSTABLE(addr, length, 16))
@@ -70,48 +72,34 @@ void tb_axi4_driver::write_internal(uint32_t addr, uint8_t *data, int length,
       addr += size;
       length -= size;
     } else {
-      axi4_master req;
       sc_uint<AXI4_ID_W> id = get_rand_id();
 
-      uint32_t word_data = 0;
-      for (int x = 0; x < 4; x++)
-        word_data |= (((uint32_t)*data++) << (8 * x));
+      for (int i = 0; i < (chunk / 4); i++) {
+        axi4_master req;
 
-      req.AWVALID = true;
-      req.AWADDR = addr;
-      req.AWID = id;
-      req.AWBURST = AXI4_BURST_INCR;
-      req.AWLEN = (chunk / 4) - 1;
-      req.WVALID = true;
-      req.WDATA = word_data;
-      req.WSTRB = 0xF;
-      req.WLAST = (chunk == 4);
-      req.BREADY = true;
-
-      req_q.push(req);
-
-      if (req.WLAST)
-        resp_q.push(req);
-
-      req.init();
-
-      // Additional data
-      for (int i = 1; i < (chunk / 4); i++) {
-        req.init();
-
-        word_data = 0;
+        uint32_t word_data = 0;
         for (int x = 0; x < 4; x++)
           word_data |= (((uint32_t)*data++) << (8 * x));
 
+        if (i == 0) { // 只有第一拍会有 aw 握手, 后续的拍都不会
+          req.AWVALID = true;
+          req.AWADDR = addr;
+          req.AWBURST = AXI4_BURST_INCR;
+          req.AWLEN = (chunk / 4) - 1;
+          req.BREADY = true;
+        }
+
+        req.AWID = id;
         req.WVALID = true;
         req.WDATA = word_data;
         req.WSTRB = 0xF;
-        req.AWID = id;
         req.WLAST = (i == ((chunk / 4) - 1));
 
+        // axi4 的 burst, 是: 一次 burst 里面包含多次 w 握手;
+        // 而不是一次 w 握手中, 传输多拍数据. 之前理解一直有误
         req_q.push(req);
 
-        if (req.WLAST)
+        if (req.WLAST) // 只有最后一拍会有 b 握手, 后续的拍都不会
           resp_q.push(req);
       }
 
@@ -152,11 +140,15 @@ void tb_axi4_driver::write_internal(uint32_t addr, uint8_t *data, int length,
 
     // Delayed data...
     if (split_addr_data) {
+      // 地址总是先发送的, 当 aw.valid 拉低时, 就意味着 aw 握手成功了, 也就是
+      // slave 已经接收到地址了
       bool address_accepted = !axi_o.AWVALID;
+      // 随机延迟, 决定是否在当前周期发送数据
+      // 这里说当前周期, 是因为下面有 wait 控制周期
       if (!delay_cycle()) {
         axi_o = req_q.front();
 
-        if (address_accepted) {
+        if (address_accepted) { // 防止多发送一次地址
           axi_o.AWVALID = false;
           axi_o.AWID = 0;
           axi_o.AWADDR = 0;
