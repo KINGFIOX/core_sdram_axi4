@@ -2,7 +2,7 @@
 #include <queue>
 
 #define BURSTABLE(addr, length, burst_size)                                    \
-  (!(addr & (burst_size - 1)) /*一次 burst 的起始地址必须对齐*/ &&               \
+  (!(addr & (burst_size - 1)) /*一次 burst 的起始地址必须对齐*/ &&             \
    length >= burst_size)
 
 typedef struct axi_resp_s {
@@ -242,6 +242,7 @@ void tb_axi4_driver::read(uint32_t addr, uint8_t *data, int length) {
       axi4_master req;
       sc_uint<AXI4_ID_W> id = get_rand_id();
 
+      // axi4 read burst: 一次 ar 握手, 多次 r 握手
       req.ARVALID = true;
       req.ARADDR = addr & ~3;
       req.ARID = id;
