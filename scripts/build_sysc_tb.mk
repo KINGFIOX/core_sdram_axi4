@@ -1,6 +1,7 @@
 ###############################################################################
 # Variables
 ###############################################################################
+CC             ?= gcc
 CXX            ?= g++
 VERILATOR_SRC  ?= /usr/share/verilator/include
 SYSTEMC_HOME   ?= /usr/local/systemc-2.3.1
@@ -37,15 +38,22 @@ EXTRA_CLEAN_FILES ?=
 
 # SRC / Object list
 src2obj       = $(OBJ_DIR)$(patsubst %$(suffix $(1)),%.o,$(notdir $(1)))
-SRC          ?= $(foreach src,$(SRC_DIR),$(wildcard $(src)/*.cpp))
+SRC_CXX      ?= $(foreach src,$(SRC_DIR),$(wildcard $(src)/*.cpp))
+SRC_C        ?= $(foreach src,$(SRC_DIR),$(wildcard $(src)/*.c))
+SRC          ?= $(SRC_CXX) $(SRC_C)
 OBJ          ?= $(foreach src,$(SRC),$(call src2obj,$(src)))
 
 ###############################################################################
 # Rules
 ###############################################################################
-define template_c
+define template_cxx
 $(call src2obj,$(1)): $(1) | $(OBJ_DIR)
 	$(CXX) $(CFLAGS) -c $$< -o $$@
+endef
+
+define template_c
+$(call src2obj,$(1)): $(1) | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -c $$< -o $$@
 endef
 
 all: $(EXE_DIR)$(TARGET)
@@ -53,7 +61,8 @@ all: $(EXE_DIR)$(TARGET)
 $(OBJ_DIR) $(EXE_DIR):
 	mkdir -p $@
 
-$(foreach src,$(SRC),$(eval $(call template_c,$(src))))
+$(foreach src,$(SRC_CXX),$(eval $(call template_cxx,$(src))))
+$(foreach src,$(SRC_C),$(eval $(call template_c,$(src))))
 
 $(EXE_DIR)$(TARGET): $(OBJ) | $(EXE_DIR) 
 	$(CXX) $(LDFLAGS) $(OBJ) -o $@ -lsystemc $(LIBS)

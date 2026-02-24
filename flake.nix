@@ -85,12 +85,12 @@
                   python3Packages.pygments
                   curl
                 ];
-                OBJCACHE = "ccache";
 
+                CC = "ccache gcc";
+                CXX = "ccache g++";
                 VERILATOR_SRC = "${verilator}/share/verilator/include";
                 SYSTEMC_HOME = "${systemc}";
                 SYSTEMC_LIBDIR = "${systemc}/lib";
-                CXX = "ccache g++";
               }
               // sdram.sdram-compiled.env
               // {
@@ -104,7 +104,7 @@
                   runHook preUnpack
                   runHook postUnpack
 
-                  export LD_LIBRARY_PATH="$PWD/tb/lib:${systemc}/lib:''${LD_LIBRARY_PATH:-}"
+                  export LD_LIBRARY_PATH="$PWD/build/lib:${systemc}/lib:''${LD_LIBRARY_PATH:-}"
 
                   GDB_DASHBOARD="$PWD/.gdb-dashboard"
                   if [ ! -f "$GDB_DASHBOARD" ]; then
@@ -114,10 +114,10 @@
 
                   echo "=== SDRAM AXI4 仿真环境已就绪 ==="
                   echo "  Mill version: $(mill --version 2>&1 | head -1)"
-                  echo "  make elaborate    — Chisel 生成 SystemVerilog"
-                  echo "  cd tb && make run — 编译并运行仿真"
-                  echo "  cd tb && make gdb — 用 GDB + Dashboard 调试"
-                  echo "  cd tb && make view— 用 GTKWave 查看波形"
+                  echo "  make elaborate — Chisel 生成 SystemVerilog"
+                  echo "  make run       — 编译并运行仿真"
+                  echo "  make gdb       — 用 GDB + Dashboard 调试"
+                  echo "  make view      — 用 GTKWave 查看波形"
                 '';
               }
             );

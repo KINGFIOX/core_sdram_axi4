@@ -26,7 +26,7 @@ let
         fileset = unions [
           ./../../build.sc
           ./../../common.sc
-          ./../../scala
+          ./../../src/scala
         ];
       };
 
