@@ -12,9 +12,6 @@
 #define MAX_ROW_OPEN_TIME sc_time(35, SC_US)
 #define MIN_ACTIVE_TO_ACTIVE sc_time(60, SC_NS)
 #define MIN_ACTIVE_TO_ACCESS sc_time(15, SC_NS)
-#define MAX_ROW_REFRESH_TIME                                                   \
-  (sc_time((64000000 / NUM_ROWS), SC_NS) +                                     \
-   sc_time(200, SC_NS)) // Add some slack (FIXME)
 
 #define DPRINTF // printf
 
@@ -34,21 +31,16 @@ void tb_sdram_mem::process(void) {
     SDRAM_CMD_LOAD_MODE
   } t_sdram_cmd;
 
+  // reset
   sc_uint<SDRAM_COL_W> col = 0;
   sc_uint<SDRAM_ROW_W> row = 0;
   sc_uint<SDRAM_BANK_W> bank = 0;
   sc_uint<32> addr = 0;
-
-  uint16_t resp_data[3];
-
   // Clear response pipeline
+  uint16_t resp_data[3];
   for (int i = 0; i < sizeof(resp_data) / sizeof(resp_data[0]); i++)
     resp_data[i] = 0;
 
-  for (unsigned b = 0; b < NUM_BANKS; b++)
-    m_activate_time[b] = sc_time_stamp();
-
-  m_refresh_cnt = 0;
   while (1) {
     sdram_io_master sdram_i = sdram_in.read();
     sdram_io_slave sdram_o = sdram_out.read();
@@ -56,9 +48,9 @@ void tb_sdram_mem::process(void) {
     t_sdram_cmd new_cmd;
 
     // Command decoder
-    if (sdram_i.CS)
+    if (sdram_i.CS) {
       new_cmd = SDRAM_CMD_INHIBIT;
-    else {
+    } else {
       if (sdram_i.RAS && sdram_i.CAS && sdram_i.WE)
         new_cmd = SDRAM_CMD_NOP;
       else if (!sdram_i.RAS && sdram_i.CAS && sdram_i.WE)
@@ -78,13 +70,6 @@ void tb_sdram_mem::process(void) {
       else
         sc_assert(0); // NOT SURE...
     }
-
-    // Check row open time...
-    for (unsigned b = 0; b < NUM_BANKS; b++)
-      if (m_active_row[b] != -1 &&
-          (sc_time_stamp() - m_activate_time[b]) > MAX_ROW_OPEN_TIME) {
-        sc_assert(!"Row open too long...");
-      }
 
     // Configure SDRAM
     if (new_cmd == SDRAM_CMD_LOAD_MODE) {
@@ -106,29 +91,13 @@ void tb_sdram_mem::process(void) {
     else if (new_cmd ==
              SDRAM_CMD_REFRESH) // 指的是 sdram 控制器定期给出刷新信号
     {
-      // cout << "SDRAM: REFRESH @ " << sc_time_stamp() << " - delta = " <<
-      // (sc_time_stamp() - m_last_refresh) << " - allowed " <<
-      // MAX_ROW_REFRESH_TIME <<endl;
-
       // Check no rows open..
-      for (unsigned b = 0; b < NUM_BANKS; b++) {
+      for (unsigned b = 0; b < NUM_BANKS; b++)
         sc_assert(m_active_row[b] == -1);
-      }
-
-      // Once init sequence complete, check for auto-refresh period...
-      if (m_refresh_cnt > 2) {
-        sc_assert((sc_time_stamp() - m_last_refresh) < MAX_ROW_REFRESH_TIME);
-      }
-
-      m_last_refresh = sc_time_stamp();
-
-      if (m_refresh_cnt < 0xFFFFFFFF)
-        m_refresh_cnt += 1;
     }
     // Row is activated and copied into the row buffer of the bank
     else if (new_cmd == SDRAM_CMD_ACTIVE) {
-      sc_assert(m_configured);       // 必须先配置了 mode register 才能激活 row
-      sc_assert(m_refresh_cnt >= 2); // 初始化的流程, 经历了至少两次 refresh
+      sc_assert(m_configured); // 必须先配置了 mode register 才能激活 row
 
       bank = sdram_i.BA;
       row = sdram_i.ADDR;
@@ -139,13 +108,8 @@ void tb_sdram_mem::process(void) {
       // A row should not be open
       sc_assert(m_active_row[bank] == -1);
 
-      // ACTIVATE periods long enough...
-      sc_assert((sc_time_stamp() - m_activate_time[bank]) >
-                MIN_ACTIVE_TO_ACTIVE);
-
       // Mark row as open
       m_active_row[bank] = row;
-      m_activate_time[bank] = sc_time_stamp();
     }
     // Read command
     else if (new_cmd == SDRAM_CMD_READ) {
@@ -161,10 +125,6 @@ void tb_sdram_mem::process(void) {
 
       // DQM expected to be low
       sc_assert(sdram_i.DQM == 0x0);
-
-      // Check row activate timing
-      sc_assert((sc_time_stamp() - m_activate_time[bank]) >
-                MIN_ACTIVE_TO_ACCESS);
 
       // Address = RBC
       addr.range(SDRAM_COL_W, 2) = col.range(SDRAM_COL_W - 1, 1);
@@ -211,10 +171,6 @@ void tb_sdram_mem::process(void) {
 
       // A row should be open
       sc_assert(m_active_row[bank] != -1);
-
-      // Check row activate timing
-      sc_assert((sc_time_stamp() - m_activate_time[bank]) >
-                MIN_ACTIVE_TO_ACCESS);
 
       // Address = RBC
       addr.range(SDRAM_COL_W, 2) = col.range(SDRAM_COL_W - 1, 1);

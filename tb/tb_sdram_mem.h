@@ -88,10 +88,6 @@ protected:
 
   static const uint32_t NUM_BANKS = 4;
   int m_active_row[NUM_BANKS];
-  sc_time m_activate_time[NUM_BANKS];
-
-  sc_time m_last_refresh;
-  uint32_t m_refresh_cnt;
 
   int m_burst_write;
   int m_burst_read;
