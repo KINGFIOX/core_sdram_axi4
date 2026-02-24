@@ -57,7 +57,11 @@ public:
     sc_stop();
   }
 
-  void init_trace(void) { verilator_trace_enable("verilator.vcd", m_dut); }
+  void init_trace(void) {
+    verilator_trace_enable("verilator.vcd", m_dut);
+    sc_trace_file *tf = sc_create_vcd_trace_file("systemc");
+    m_mem->add_trace(tf, "tb.TB_MEM.");
+  }
 
   SC_HAS_PROCESS(testbench);
   testbench(sc_module_name name) : testbench_vbase(name) {

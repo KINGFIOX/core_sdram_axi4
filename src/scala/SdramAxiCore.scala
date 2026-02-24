@@ -37,6 +37,7 @@ class SdramAxiCore extends Module {
   val SDRAM_REFRESH_CYCLES = (64000 * SDRAM_MHZ) / SDRAM_REFRESH_CNT - 1 // 389
 
   val CMD_W = 4
+  val CMD_INHIBIT = "b1111".U(CMD_W.W)
   val CMD_NOP = "b0111".U(CMD_W.W)
   val CMD_ACTIVE = "b0011".U(CMD_W.W)
   val CMD_READ = "b0101".U(CMD_W.W)
@@ -55,6 +56,7 @@ class SdramAxiCore extends Module {
     //   0      1     2       3       4        5        6       7        8         9
     val init, delay, idle, activate, read, read_wait, write0, write1, precharge, refresh = Value
   }
+  State.all.foreach { s => println(s"State: ${s} = ${s.litValue}") }
 
   val AUTO_PRECHARGE = 10
   val ALL_BANKS = 10
@@ -85,7 +87,7 @@ class SdramAxiCore extends Module {
   val addrBankW = ramAddrW(SDRAM_COL_W + 2, SDRAM_COL_W + 1)
 
   // --- Registers ---
-  val commandQ = RegInit(CMD_NOP)
+  val commandQ = RegInit(CMD_INHIBIT)
   val addrQ = RegInit(0.U(SDRAM_ROW_W.W))
   val dataQ = RegInit(0.U(SDRAM_DATA_W.W))
   val dataRdEnQ = RegInit(true.B)

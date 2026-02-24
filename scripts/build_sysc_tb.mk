@@ -6,23 +6,23 @@ VERILATOR_SRC  ?= /usr/share/verilator/include
 SYSTEMC_HOME   ?= /usr/local/systemc-2.3.1
 SYSTEMC_LIBDIR ?= $(SYSTEMC_HOME)/lib-linux64
 
-OBJ_DIR      ?= obj/
+OBJ_DIR      ?= build/obj/
 EXE_DIR      ?= build/
-SRC_DIR      ?= ./
+SRC_DIR      ?= src/cxx/
 
 TARGET       ?= test.x
 
 # Additional include directories
 INCLUDE_PATH ?=
 INCLUDE_PATH += $(SRC_DIR)
-INCLUDE_PATH += ./verilated
+INCLUDE_PATH += build/verilated
 INCLUDE_PATH += $(VERILATOR_SRC)
 INCLUDE_PATH += $(VERILATOR_SRC)/vltstd
 INCLUDE_PATH += $(SYSTEMC_HOME)/include
 
 # Dependancies
 LIB_PATH     ?=
-LIB_PATH     += ./lib 
+LIB_PATH     += build/lib 
 LIBS          = -lsyscverilated
 
 # Flags

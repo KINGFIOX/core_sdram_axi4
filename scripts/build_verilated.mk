@@ -6,9 +6,9 @@ VERILATOR_SRC  ?= /usr/share/verilator/include
 SYSTEMC_HOME   ?= /usr/local/systemc-2.3.1
 SYSTEMC_LIBDIR ?= $(SYSTEMC_HOME)/lib-linux64
 
-SRC_DIR       ?= verilated/
-OBJ_DIR       ?= obj_verilated/
-LIB_DIR       ?= lib/
+SRC_DIR       ?= build/verilated/
+OBJ_DIR       ?= build/obj_verilated/
+LIB_DIR       ?= build/lib/
 
 LIBNAME       ?= libsyscverilated.a
 

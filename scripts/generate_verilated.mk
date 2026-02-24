@@ -1,9 +1,9 @@
 ###############################################################################
 # Variables
 ###############################################################################
-OUTPUT_DIR       ?= verilated
-RTL_DIR          ?= ../build/rtl
-SRC_V_DIR        ?= ../src_v
+OUTPUT_DIR       ?= build/verilated
+RTL_DIR          ?= build/rtl
+SRC_V_DIR        ?= src/verilog
 NAME             ?= SDRAMSimTop
 
 # Verilator options

@@ -83,6 +83,8 @@ object scala extends SDRAMDesign
 trait SDRAMDesign extends common.HasChisel with ScalafmtModule {
   def scalaVersion = T(defaultScalaVersion)
 
+  override def sources = T.sources(pwd / "src" / "scala")
+
   def chiselModule    = None
   def chiselPluginJar = T(None)
   def chiselPluginIvy = Some(v.chiselPlugin)

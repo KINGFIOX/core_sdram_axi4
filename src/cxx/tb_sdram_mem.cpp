@@ -75,6 +75,7 @@ void tb_sdram_mem::process(void) {
       m_burst_type = (tBurstType)(int)sdram_i.ADDR[3];
       m_write_burst_en = (bool)!sdram_i.ADDR[9];
       m_burst_length = (tBurstLength)(int)sdram_i.ADDR.range(2, 0);
+      printf("burst_length: %d\n", m_burst_length);
       m_cas_latency = (int)sdram_i.ADDR.range(6, 4);
 
       // 绝大多数场景, burst_type 都是 sequential, interleaved
@@ -180,8 +181,6 @@ void tb_sdram_mem::process(void) {
         // Close rows
         for (unsigned i = 0; i < NUM_BANKS; i++)
           m_active_row[i] = -1;
-
-
       }
       // Specified bank
       else {
