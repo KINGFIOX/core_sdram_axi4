@@ -88,12 +88,10 @@ void tb_sdram_mem::process(void) {
       sc_assert(m_burst_type == BURST_TYPE_SEQUENTIAL);
     }
     // Auto refresh
-    else if (new_cmd ==
-             SDRAM_CMD_REFRESH) // 指的是 sdram 控制器定期给出刷新信号
+    else if (new_cmd == SDRAM_CMD_REFRESH) // 指的是 sdram 控制器定期给出刷新信号
     {
       // Check no rows open..
-      for (unsigned b = 0; b < NUM_BANKS; b++)
-        sc_assert(m_active_row[b] == -1);
+      for (unsigned b = 0; b < NUM_BANKS; b++) sc_assert(m_active_row[b] == -1);
     }
     // Row is activated and copied into the row buffer of the bank
     else if (new_cmd == SDRAM_CMD_ACTIVE) {
@@ -128,8 +126,7 @@ void tb_sdram_mem::process(void) {
 
       // Address = RBC
       addr.range(SDRAM_COL_W, 2) = col.range(SDRAM_COL_W - 1, 1);
-      addr.range(SDRAM_COL_W + SDRAM_BANK_W, SDRAM_COL_W + SDRAM_BANK_W - 1) =
-          bank;
+      addr.range(SDRAM_COL_W + SDRAM_BANK_W, SDRAM_COL_W + SDRAM_BANK_W - 1) = bank;
       addr.range(31, SDRAM_COL_W + SDRAM_BANK_W + 1) = row;
 
       m_burst_offset = 0;

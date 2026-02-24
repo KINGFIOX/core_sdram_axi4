@@ -8,7 +8,7 @@ NAME             ?= SDRAMSimTop
 
 # Verilator options
 VERILATE_PARAMS  ?= --trace
-VERILATOR_OPTS   ?= --pins-sc-uint
+VERILATOR_OPTS   ?= --pins-sc-uint --pins-inout-enables
 
 TARGETS          ?= $(OUTPUT_DIR)/V$(NAME)
 
@@ -23,6 +23,7 @@ $(OUTPUT_DIR):
 $(OUTPUT_DIR)/V$(NAME): $(RTL_DIR)/$(NAME).sv | $(OUTPUT_DIR)
 	verilator --sc \
 		$(RTL_DIR)/$(NAME).sv \
+		-I$(RTL_DIR) \
 		--top $(NAME) \
 		--Mdir $(OUTPUT_DIR) \
 		$(VERILATOR_OPTS) $(VERILATE_PARAMS)

@@ -8,12 +8,12 @@ import $file.`rocket-chip`.dependencies.cde.{common => cdeCommon}
 import $file.`rocket-chip`.dependencies.diplomacy.{common => diplomacyCommon}
 import $file.`rocket-chip`.{common => rocketChipCommon}
 
-val defaultScalaVersion = "2.13.16"
+val defaultScalaVersion = "2.13.18"
 val pwd = os.Path(sys.env("MILL_WORKSPACE_ROOT"))
 
 object v {
-  val chisel       = ivy"org.chipsalliance::chisel:6.7.0"
-  val chiselPlugin = ivy"org.chipsalliance:chisel-plugin_${defaultScalaVersion}:6.7.0"
+  val chisel       = ivy"org.chipsalliance::chisel:7.6.0"
+  val chiselPlugin = ivy"org.chipsalliance:chisel-plugin_${defaultScalaVersion}:7.6.0"
 }
 
 trait HasThisChisel extends SbtModule {

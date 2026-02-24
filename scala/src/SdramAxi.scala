@@ -1,7 +1,8 @@
 package sdram
 
 import chisel3._
-import chisel3.experimental._
+import chisel3.util._
+import chisel3.experimental.{Analog, attach}
 import freechips.rocketchip.amba.axi4._
 import org.chipsalliance.diplomacy.lazymodule._
 import freechips.rocketchip.diplomacy.{AddressSet, TransferSizes}
@@ -17,9 +18,6 @@ class SDRAMIO extends Bundle {
   val addr = Output(UInt(13.W))
   val ba = Output(UInt(2.W))
   val dqm = Output(UInt(2.W))
-  val data_output = Output(UInt(16.W))
-  val data_out_en = Output(Bool())
-  val data_input = Input(UInt(16.W))
 }
 
 class SdramAxiTop(axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBits = 32, dataBits = 32, idBits = 4)) extends Module {
@@ -27,7 +25,6 @@ class SdramAxiTop(axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBit
     val axi = Flipped(new AXI4Bundle(axiParams))
     val sdram = new SDRAMIO
   })
-
   val pmem = Module(new SdramAxiPmem(axiParams))
   val core = Module(new SdramAxiCore)
 
@@ -44,6 +41,8 @@ class SdramAxiTop(axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBit
   pmem.io.ram.readData := core.io.inportReadData
 
   io.sdram <> core.io.sdram
+  val sdram_dq = IO(Analog(16.W))
+  attach(sdram_dq, core.sdram_dq)
 }
 
 class AXI4SDRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyModule {
@@ -69,8 +68,11 @@ class AXI4SDRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyMo
     val (in, edge) = node.in(0)
     val sdram_bundle = IO(new SDRAMIO)
 
+    val sdram_dq = IO(Analog(16.W))
+
     val ctrl = Module(new SdramAxiTop(edge.bundle))
     ctrl.io.axi <> in
     sdram_bundle <> ctrl.io.sdram
+    attach(sdram_dq, ctrl.sdram_dq)
   }
 }

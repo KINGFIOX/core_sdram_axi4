@@ -2,6 +2,7 @@ package sdram
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.Analog
 
 class SdramAxiCoreIO extends Bundle {
   val inportWr = Input(UInt(4.W)) // strb
@@ -103,6 +104,10 @@ class SdramAxiCore extends Module {
   val delayStateQ = RegInit(State.idle)
 
   val delayQ = RegInit(0.U(DELAY_W.W))
+
+  // --- tri-state ---
+  val sdram_dq = IO(Analog(16.W))
+  val data_input = TriStateInBuf(sdram_dq, dataQ, !dataRdEnQ)
 
   // --- Refresh counter ---
   val refreshTimerQ = RegInit((SDRAM_START_DELAY + 100).U(REFRESH_CNT_W.W))
@@ -275,7 +280,7 @@ class SdramAxiCore extends Module {
   }
 
   // --- Read data pipeline ---
-  val sampleDataQ = ShiftRegister(io.sdram.data_input, 2, 0.U(SDRAM_DATA_W.W), true.B)
+  val sampleDataQ = ShiftRegister(data_input, 2, 0.U(SDRAM_DATA_W.W), true.B)
   val rdDelayed = ShiftRegister(stateQ === State.read, SDRAM_READ_LATENCY + 2, false.B, true.B)
 
   when(stateQ === State.write0) {
@@ -303,9 +308,7 @@ class SdramAxiCore extends Module {
   io.inportError := false.B
   io.inportReadData := ramReadDataW
 
-  io.sdram.clk := (~clock.asUInt)(0)
-  io.sdram.data_out_en := !dataRdEnQ
-  io.sdram.data_output := dataQ
+  io.sdram.clk := (~clock.asUInt)
   io.sdram.cke := ckeQ
   io.sdram.cs := commandQ(3)
   io.sdram.ras := commandQ(2)

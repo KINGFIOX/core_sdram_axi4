@@ -85,8 +85,9 @@ private:
   // R channel
   sc_signal<bool> m_in_r_ready;
 
-  // SDRAM input
-  sc_signal<sc_uint<16>> m_sdram_data_input;
+  // SDRAM dq input (SC port from --pins-inout-enables)
+  // tri-state
+  sc_signal<sc_uint<16>> m_sdram_dq;
 
   // Outputs: AW ready
   sc_signal<bool> m_in_aw_ready;
@@ -115,8 +116,6 @@ private:
   sc_signal<sc_uint<2>> m_sdram_dqm;
   sc_signal<sc_uint<13>> m_sdram_addr;
   sc_signal<sc_uint<2>> m_sdram_ba;
-  sc_signal<sc_uint<16>> m_sdram_data_output;
-  sc_signal<bool> m_sdram_data_out_en;
 
 public:
   VSDRAMSimTop *m_rtl;
