@@ -21,6 +21,8 @@ public:
   //-------------------------------------------------------------
   // Constructor
   //-------------------------------------------------------------
+  // 如果一个 sc_module 有进程, 就像这里的 tb_sdram_mem::process
+  // 因为会用到 SC_CTHREAD, 需要用 SC_HAS_PROCESS 来注册
   SC_HAS_PROCESS(tb_sdram_mem);
   tb_sdram_mem(sc_module_name name) : sc_module(name) {
     SC_CTHREAD(process, clk_in.pos());

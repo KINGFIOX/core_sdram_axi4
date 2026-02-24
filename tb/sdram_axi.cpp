@@ -69,6 +69,12 @@ sdram_axi::sdram_axi(sc_module_name name) : sc_module(name) {
   m_rtl->sdram_data_out_en(m_sdram_data_out_en);
   m_rtl->sdram_data_input(m_sdram_data_input);
 
+  // 这里使用 sc_method, 而不是 sc_cthread
+  // verilated sdram_axi, 他内部有自己维护的 sc_cthread 之类的
+  // 我们这里只用做连线就好了: 将结构化的 axi4_master, axi4_slave 转换成 一根根的 sc_signal
+  // 因为 sram_axi 对外的信号线是一根根的 sc_signal, 而不是我们这里包装的 axi4_master, axi4_slave
+  // 连线是 纯组合逻辑, 所以用 sc_method
+  // 因为是纯组合逻辑, 所以就需要将所有的信号都加入到敏感列表中, 类似于 always @(*)
   SC_METHOD(async_outputs);
   sensitive << clk_in;
   sensitive << rst_in;

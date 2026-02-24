@@ -56,6 +56,12 @@ void tb_mem_test::process(void) {
           this->write(addr + i, (uint8_t)data.range((i * 8) + 7, (i * 8)));
 
         m_driver->write32(addr, data);
+
+        sc_uint<32> data_rd = m_driver->read32(addr);
+        if (data_rd != data)
+          printf("WRITE-READ MISMATCH: %08x -> wrote %08x, read %08x\n", addr,
+                 (uint32_t)data, (uint32_t)data_rd);
+        sc_assert(data_rd == data);
       } break;
       // Word read
       case 1: {
@@ -86,8 +92,7 @@ void tb_mem_test::process(void) {
           sc_assert(this->read(addr + i) == buffer[i]);
         }
 
-        delete buffer;
-        buffer = NULL;
+        delete[] buffer; buffer = NULL;
       } break;
       // Block write
       case 3: {
@@ -102,8 +107,17 @@ void tb_mem_test::process(void) {
 
         m_driver->write(addr, buffer, length);
 
-        delete buffer;
-        buffer = NULL;
+        uint8_t *readback = new uint8_t[length];
+        m_driver->read(addr, readback, length);
+        for (int i = 0; i < length; i++) {
+          if (readback[i] != buffer[i])
+            printf("WRITE-READ MISMATCH: %08x -> wrote %02x, read %02x\n",
+                   addr + i, buffer[i], readback[i]);
+          sc_assert(readback[i] == buffer[i]);
+        }
+        delete[] readback;
+
+        delete[] buffer; buffer = NULL;
       } break;
       }
     }
