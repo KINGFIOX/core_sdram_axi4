@@ -13,8 +13,6 @@
 #define MIN_ACTIVE_TO_ACTIVE sc_time(60, SC_NS)
 #define MIN_ACTIVE_TO_ACCESS sc_time(15, SC_NS)
 
-#define DPRINTF // printf
-
 //-----------------------------------------------------------------
 // process: Handle requests
 //-----------------------------------------------------------------
@@ -51,21 +49,21 @@ void tb_sdram_mem::process(void) {
     if (sdram_i.CS) {
       new_cmd = SDRAM_CMD_INHIBIT;
     } else {
-      if (sdram_i.RAS && sdram_i.CAS && sdram_i.WE)
+      if (sdram_i.RAS && sdram_i.CAS && sdram_i.WE) // 111
         new_cmd = SDRAM_CMD_NOP;
-      else if (!sdram_i.RAS && sdram_i.CAS && sdram_i.WE)
+      else if (!sdram_i.RAS && sdram_i.CAS && sdram_i.WE) // 011
         new_cmd = SDRAM_CMD_ACTIVE;
-      else if (sdram_i.RAS && !sdram_i.CAS && sdram_i.WE)
+      else if (sdram_i.RAS && !sdram_i.CAS && sdram_i.WE) // 101
         new_cmd = SDRAM_CMD_READ;
-      else if (sdram_i.RAS && !sdram_i.CAS && !sdram_i.WE)
+      else if (sdram_i.RAS && !sdram_i.CAS && !sdram_i.WE) // 100
         new_cmd = SDRAM_CMD_WRITE;
-      else if (sdram_i.RAS && sdram_i.CAS && !sdram_i.WE)
+      else if (sdram_i.RAS && sdram_i.CAS && !sdram_i.WE) // 110
         new_cmd = SDRAM_CMD_BURST_TERM;
-      else if (!sdram_i.RAS && sdram_i.CAS && !sdram_i.WE)
+      else if (!sdram_i.RAS && sdram_i.CAS && !sdram_i.WE) // 010
         new_cmd = SDRAM_CMD_PRECHARGE;
-      else if (!sdram_i.RAS && !sdram_i.CAS && sdram_i.WE)
+      else if (!sdram_i.RAS && !sdram_i.CAS && sdram_i.WE) // 001
         new_cmd = SDRAM_CMD_REFRESH;
-      else if (!sdram_i.RAS && !sdram_i.CAS && !sdram_i.WE)
+      else if (!sdram_i.RAS && !sdram_i.CAS && !sdram_i.WE) // 000
         new_cmd = SDRAM_CMD_LOAD_MODE;
       else
         sc_assert(0); // NOT SURE...
@@ -78,10 +76,6 @@ void tb_sdram_mem::process(void) {
       m_write_burst_en = (bool)!sdram_i.ADDR[9];
       m_burst_length = (tBurstLength)(int)sdram_i.ADDR.range(2, 0);
       m_cas_latency = (int)sdram_i.ADDR.range(6, 4);
-
-      // write burst=1, burst len=0, cas latency=0
-      DPRINTF("SDRAM: MODE - write burst %d, burst len %d, CAS latency %d\n",
-              m_write_burst_en, m_burst_length, m_cas_latency);
 
       // 绝大多数场景, burst_type 都是 sequential, interleaved
       // 是一个历史遗留特性
@@ -100,9 +94,6 @@ void tb_sdram_mem::process(void) {
       bank = sdram_i.BA;
       row = sdram_i.ADDR;
 
-      DPRINTF("SDRAM: ACTIVATE Row=%x, Bank=%x\n", (unsigned)row,
-              (unsigned)bank);
-
       // A row should not be open
       sc_assert(m_active_row[bank] == -1);
 
@@ -112,33 +103,18 @@ void tb_sdram_mem::process(void) {
     // Read command
     else if (new_cmd == SDRAM_CMD_READ) {
       sc_assert(m_configured);
-
       bool en_ap = sdram_i.ADDR[SDRAM_COL_W];
       col = sdram_i.ADDR;
       bank = sdram_i.BA;
       row = m_active_row[bank];
-
-      // A row should be open
-      sc_assert(m_active_row[bank] != -1);
-
-      // DQM expected to be low
-      sc_assert(sdram_i.DQM == 0x0);
-
+      sc_assert(m_active_row[bank] != -1); // A row should be open
+      sc_assert(sdram_i.DQM == 0x0); // DQM expected to be low
       // Address = RBC
-      addr.range(SDRAM_COL_W, 2) = col.range(SDRAM_COL_W - 1, 1);
-      addr.range(SDRAM_COL_W + SDRAM_BANK_W, SDRAM_COL_W + SDRAM_BANK_W - 1) = bank;
+      addr.range(SDRAM_COL_W, 1) = col.range(SDRAM_COL_W - 1, 0);
+      addr.range(SDRAM_COL_W + SDRAM_BANK_W, SDRAM_COL_W + 1) = bank;
       addr.range(31, SDRAM_COL_W + SDRAM_BANK_W + 1) = row;
-
-      m_burst_offset = 0;
-
-      uint32_t data = read32((uint32_t)addr);
-      DPRINTF("SDRAM: READ %08x = %08x [Row=%x, Bank=%x, Col=%x]\n",
-              (uint32_t)addr, data, (unsigned)row, (unsigned)bank,
-              (unsigned)col);
-
-      resp_data[m_cas_latency - 2] = data >> (m_burst_offset * 8);
-      m_burst_offset += 2;
-
+      resp_data[m_cas_latency - 2] = read16((uint32_t)addr);
+      addr += 2;
       switch (m_burst_length) {
       default:
       case BURST_LEN_1:
@@ -154,8 +130,6 @@ void tb_sdram_mem::process(void) {
         m_burst_read = 8 - 1;
         break;
       }
-
-      m_burst_close_row[bank] = en_ap;
     }
     // Write command
     else if (new_cmd == SDRAM_CMD_WRITE) {
@@ -166,40 +140,15 @@ void tb_sdram_mem::process(void) {
       bank = sdram_i.BA;
       row = m_active_row[bank];
 
-      // A row should be open
       sc_assert(m_active_row[bank] != -1);
 
       // Address = RBC
-      addr.range(SDRAM_COL_W, 2) = col.range(SDRAM_COL_W - 1, 1);
-      addr.range(SDRAM_COL_W + SDRAM_BANK_W, SDRAM_COL_W + SDRAM_BANK_W - 1) =
-          bank;
+      addr.range(SDRAM_COL_W, 1) = col.range(SDRAM_COL_W - 1, 0);
+      addr.range(SDRAM_COL_W + SDRAM_BANK_W, SDRAM_COL_W + 1) = bank;
       addr.range(31, SDRAM_COL_W + SDRAM_BANK_W + 1) = row;
 
-      uint32_t data = (uint32_t)sdram_i.DATA_OUTPUT;
-      uint8_t mask = 0;
-
-      m_burst_offset = 0;
-
-      data <<= (m_burst_offset * 8);
-      mask = 0x3 << (m_burst_offset);
-
-      // Lower byte - disabled
-      if (sdram_i.DQM[0]) {
-        data &= ~(0xFF << ((m_burst_offset + 0) * 8));
-        mask &= ~(1 << (m_burst_offset + 0));
-      }
-
-      // Upper byte disabled
-      if (sdram_i.DQM[1]) {
-        data &= ~(0xFF << ((m_burst_offset + 1) * 8));
-        mask &= ~(1 << (m_burst_offset + 1));
-      }
-
-      DPRINTF("SDRAM: WRITE %08x = %08x MASK=%x [Row=%x, Bank=%x, Col=%x]\n",
-              (uint32_t)addr, data, mask, (unsigned)row, (unsigned)bank,
-              (unsigned)col);
-      write32((uint32_t)addr, ((uint32_t)data) << 0, mask);
-      m_burst_offset += 2;
+      write16((uint32_t)addr, (uint16_t)sdram_i.DATA_OUTPUT, (uint8_t)sdram_i.DQM);
+      addr += 2;
 
       // Configure remaining burst length
       if (m_write_burst_en) {
@@ -221,7 +170,6 @@ void tb_sdram_mem::process(void) {
       } else
         m_burst_write = 0;
 
-      m_burst_close_row[bank] = en_ap;
     }
     // Row is precharged and stored back into the memory array
     else if (new_cmd == SDRAM_CMD_PRECHARGE) {
@@ -233,15 +181,11 @@ void tb_sdram_mem::process(void) {
         for (unsigned i = 0; i < NUM_BANKS; i++)
           m_active_row[i] = -1;
 
-        DPRINTF("SDRAM: PRECHARGE - all banks\n");
 
       }
       // Specified bank
       else {
         bank = sdram_i.BA;
-
-        DPRINTF("SDRAM: PRECHARGE Bank=%x, Active Row=%x\n", (unsigned)bank,
-                (unsigned)m_active_row[bank]);
 
         // Close specific row
         m_active_row[bank] = -1;
@@ -252,70 +196,19 @@ void tb_sdram_mem::process(void) {
       m_burst_write = 0;
       m_burst_read = 0;
 
-      DPRINTF("SDRAM: Burst terminate\n");
     }
 
     // WRITE: Burst continuation...
     if (m_burst_write > 0 && new_cmd == SDRAM_CMD_NOP) {
-      uint32_t data = (uint32_t)sdram_i.DATA_OUTPUT;
-      uint8_t mask = 0;
-
-      data <<= (m_burst_offset * 8);
-      mask = 0x3 << (m_burst_offset);
-
-      // Lower byte - disabled
-      if (sdram_i.DQM[0]) {
-        data &= ~(0xFF << ((m_burst_offset + 0) * 8));
-        mask &= ~(1 << (m_burst_offset + 0));
-      }
-
-      // Upper byte disabled
-      if (sdram_i.DQM[1]) {
-        data &= ~(0xFF << ((m_burst_offset + 1) * 8));
-        mask &= ~(1 << (m_burst_offset + 1));
-      }
-
-      DPRINTF("SDRAM: WRITE %08x = %08x MASK=%x [Row=%x, Bank=%x, Col=%x]\n",
-              (uint32_t)addr, data, mask, (unsigned)row, (unsigned)bank,
-              (unsigned)col);
-      write32((uint32_t)addr, ((uint32_t)data) << 0, mask);
-      m_burst_offset += 2;
-
-      // Continue...
-      if (m_burst_offset == 4) {
-        m_burst_offset = 0;
-        addr += 4;
-      }
-
+      write16((uint32_t)addr, (uint16_t)sdram_i.DATA_OUTPUT, (uint8_t)sdram_i.DQM);
+      addr += 2;
       m_burst_write -= 1;
-
-      if (m_burst_write == 0 && m_burst_close_row[bank]) {
-        // Close specific row
-        m_active_row[bank] = -1;
-      }
     }
     // READ: Burst continuation
     else if (m_burst_read > 0 && new_cmd == SDRAM_CMD_NOP) {
-      uint32_t data = read32((uint32_t)addr);
-      DPRINTF("SDRAM: READ %08x = %08x [Row=%x, Bank=%x, Col=%x]\n",
-              (uint32_t)addr, data, (unsigned)row, (unsigned)bank,
-              (unsigned)col);
-
-      resp_data[m_cas_latency - 2] = data >> (m_burst_offset * 8);
-      m_burst_offset += 2;
-
-      // Continue...
-      if (m_burst_offset == 4) {
-        m_burst_offset = 0;
-        addr += 4;
-      }
-
+      resp_data[m_cas_latency - 2] = read16((uint32_t)addr);
+      addr += 2;
       m_burst_read -= 1;
-
-      if (m_burst_read == 0 && m_burst_close_row[bank]) {
-        // Close specific row
-        m_active_row[bank] = -1;
-      }
     }
 
     sdram_o.DATA_INPUT = resp_data[0];
@@ -329,20 +222,21 @@ void tb_sdram_mem::process(void) {
   }
 }
 //-----------------------------------------------------------------
-// write32: Write a 32-bit word to memory
+// write16: Write a 16-bit word to memory with DQM masking
 //-----------------------------------------------------------------
-void tb_sdram_mem::write32(uint32_t addr, uint32_t data, uint8_t strb) {
-  for (int i = 0; i < 4; i++)
-    if (strb & (1 << i))
-      tb_memory::write(addr + i, data >> (i * 8));
+void tb_sdram_mem::write16(uint32_t addr, uint16_t data, uint8_t dqm) {
+  if (!(dqm & 1))
+    tb_memory::write(addr, data & 0xFF);
+  if (!(dqm & 2))
+    tb_memory::write(addr + 1, (data >> 8) & 0xFF);
 }
 //-----------------------------------------------------------------
-// read32: Read a 32-bit word from memory
+// read16: Read a 16-bit word from memory
 //-----------------------------------------------------------------
-uint32_t tb_sdram_mem::read32(uint32_t addr) {
-  uint32_t data = 0;
-  for (int i = 0; i < 4; i++)
-    data |= ((uint32_t)tb_memory::read(addr + i)) << (i * 8);
+uint16_t tb_sdram_mem::read16(uint32_t addr) {
+  uint16_t data = 0;
+  data |= tb_memory::read(addr);
+  data |= ((uint16_t)tb_memory::read(addr + 1)) << 8;
   return data;
 }
 //-----------------------------------------------------------------

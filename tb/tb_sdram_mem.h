@@ -56,8 +56,8 @@ public:
   void enable_delays(bool enable) { m_enable_delays = enable; }
   void write(uint32_t addr, uint8_t data);
   uint8_t read(uint32_t addr);
-  void write32(uint32_t addr, uint32_t data, uint8_t strb = 0xF);
-  uint32_t read32(uint32_t addr);
+  void write16(uint32_t addr, uint16_t data, uint8_t dqm);
+  uint16_t read16(uint32_t addr);
 
   void process(void);
   bool delay_cycle(void) { return m_enable_delays ? rand() & 1 : 0; }
@@ -75,10 +75,10 @@ protected:
   tBurstType m_burst_type;
 
   typedef enum eBurstLength {
-    BURST_LEN_1,
-    BURST_LEN_2,
-    BURST_LEN_4,
-    BURST_LEN_8
+    BURST_LEN_1, // 0
+    BURST_LEN_2, // 1
+    BURST_LEN_4, // 2
+    BURST_LEN_8  // 3
   } tBurstLength;
 
   tBurstLength m_burst_length;
@@ -91,8 +91,6 @@ protected:
 
   int m_burst_write;
   int m_burst_read;
-  bool m_burst_close_row[NUM_BANKS];
-  int m_burst_offset;
 };
 
 #endif
