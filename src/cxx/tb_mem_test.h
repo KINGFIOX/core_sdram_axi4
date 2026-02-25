@@ -6,7 +6,7 @@
 #include <systemc.h>
 
 //-------------------------------------------------------------
-// tb_mem_test: Memory tester (using driver)
+// tb_mem_test: Memory tester (using driver) (sequencer)
 //-------------------------------------------------------------
 class tb_mem_test : public sc_module, public tb_memory {
 public:

@@ -13,7 +13,7 @@ uint16_t sdram_read(uint32_t addr) {
   return half;
 }
 
-void sdram_write(uint32_t addr, uint8_t half) {
-  sdram_mem[addr] = half;
-  printf("sdram_write: addr = %08x, data = %02x\n", addr, half);
+void sdram_write(uint32_t addr, uint8_t byte) {
+  sdram_mem[addr] = byte;
+  printf("sdram_write: addr = %08x, data = %02x\n", addr, byte);
 }
