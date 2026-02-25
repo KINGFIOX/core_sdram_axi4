@@ -4,16 +4,17 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.Analog
 
-class sdram_cmd extends BlackBox {
-  val io = IO(new Bundle {
-    val clock = Input(Clock())
-    val valid = Input(Bool())
-    val wen = Input(Bool())
-    val addr = Input(UInt(32.W))
-    val wdata = Input(UInt(16.W))
-    val rdata = Output(UInt(16.W))
-  })
+class sdram_cmd_io extends Bundle {
+  val clock = Input(Clock())
+  val valid = Input(Bool())
+  val wen = Input(Bool())
+  val dqm_n = Input(UInt(2.W))
+  val addr = Input(UInt(32.W))
+  val wdata = Input(UInt(16.W))
+  val rdata = Output(UInt(16.W))
 }
+
+class sdram_cmd extends FixedIOExtModule(new sdram_cmd_io) { }
 
 class SdramMem extends RawModule {
   val io = IO(Flipped(new SDRAMIO))
@@ -69,6 +70,7 @@ class SdramMemImpl extends Module with RequireAsyncReset {
   sdram_cmd.io.wen := false.B
   sdram_cmd.io.addr := 0.U
   sdram_cmd.io.wdata := 0.U
+  sdram_cmd.io.dqm_n := "b11".U
 
   // --- output ---
   private val next_data_out_en = WireInit(false.B)
@@ -135,6 +137,7 @@ class SdramMemImpl extends Module with RequireAsyncReset {
       sdram_cmd.io.addr := addrW
       sdram_cmd.io.wen := true.B
       sdram_cmd.io.wdata := wdataW
+      sdram_cmd.io.dqm_n := io.dqm_n
 
       burstWriteCountQ := Mux( writeBurstEnQ, (1.U << burstLenQ) - 1.U, 0.U )
       burstAddrQ := addrW + 2.U
@@ -159,6 +162,7 @@ class SdramMemImpl extends Module with RequireAsyncReset {
         sdram_cmd.io.addr := addrW
         sdram_cmd.io.wen := true.B
         sdram_cmd.io.wdata := wdataW
+        sdram_cmd.io.dqm_n := io.dqm_n
 
         burstWriteCountQ := burstWriteCountQ - 1.U
         burstAddrQ := addrW + 2.U
