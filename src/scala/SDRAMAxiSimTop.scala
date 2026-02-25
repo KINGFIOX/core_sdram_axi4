@@ -15,8 +15,10 @@ class SDRAMAxiSimTop extends FixedIORawModule(new SDRAMAxi4OnlyInterface)
   override protected def implicitClock: Clock = io.clock
   override protected def implicitReset: Reset = io.reset
 
-  val ctrl = Module(new SdramAxiTop)
-  val mem  = Module(new SdramMem)
+  val sdramParams = SdramParams()
+
+  val ctrl = Module(new SdramAxiTop(sdramParams))
+  val mem  = Module(new SdramMem(sdramParams))
 
   ctrl.io.axi <> io.in
   mem.io <> ctrl.io.sdram

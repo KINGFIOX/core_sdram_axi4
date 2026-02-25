@@ -16,9 +16,9 @@ class sdram_cmd_io extends Bundle {
 
 class sdram_cmd extends FixedIOExtModule(new sdram_cmd_io) { }
 
-class SdramMem extends RawModule {
-  val io = IO(Flipped(new SDRAMIO))
-  val sdram_dq = IO(Analog(16.W))
+class SdramMem(val p: SdramParams = SdramParams()) extends RawModule {
+  val io = IO(Flipped(new SDRAMIO(p)))
+  val sdram_dq = IO(Analog(p.dataW.W))
   val clock = ( ~ io.clk.asBool ).asClock
   val reset = ( io.cs ).asAsyncReset
   val module = withClockAndReset(clock, reset) { Module(new SdramMemImpl) }

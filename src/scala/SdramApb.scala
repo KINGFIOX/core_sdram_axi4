@@ -9,14 +9,17 @@ import freechips.rocketchip.diplomacy.{AddressSet}
 import org.chipsalliance.cde.config.Parameters
 import os.read
 
-class SdramApbTop(apbParams: APBBundleParameters = APBBundleParameters(addrBits = 32, dataBits = 32)) extends Module {
+class SdramApbTop(
+  sdramParams: SdramParams = SdramParams(),
+  apbParams: APBBundleParameters = APBBundleParameters(addrBits = 32, dataBits = 32)
+) extends Module {
   val io = IO(new Bundle {
     val apb   = Flipped(new APBBundle(apbParams))
-    val sdram = new SDRAMIO
+    val sdram = new SDRAMIO(sdramParams)
   })
 
   // --- modules ----
-  private val core = Module(new SdramCore)
+  private val core = Module(new SdramCore(sdramParams))
   core.io.inportLen := 0.U // always: burst len = 0
   core.io.inportWr := 0.U // default
   core.io.inportRd := false.B
@@ -76,11 +79,11 @@ class SdramApbTop(apbParams: APBBundleParameters = APBBundleParameters(addrBits 
 
   // SDRAM outputs
   io.sdram <> core.io.sdram
-  val sdram_dq = IO(Analog(16.W))
+  val sdram_dq = IO(Analog(sdramParams.dataW.W))
   attach(sdram_dq, core.sdram_dq)
 }
 
-class APBSDRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyModule {
+class APBSDRAM(address: Seq[AddressSet], sdramParams: SdramParams = SdramParams())(implicit p: Parameters) extends LazyModule {
   val node = APBSlaveNode(
     Seq(
       APBSlavePortParameters(
@@ -100,9 +103,9 @@ class APBSDRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyMod
 
   class Impl extends LazyModuleImp(this) {
     val (in, edge) = node.in(0)
-    val sdram_bundle = IO(new SDRAMIO)
-    val sdram_dq = IO(Analog(16.W))
-    val ctrl = Module(new SdramApbTop(edge.bundle))
+    val sdram_bundle = IO(new SDRAMIO(sdramParams))
+    val sdram_dq = IO(Analog(sdramParams.dataW.W))
+    val ctrl = Module(new SdramApbTop(sdramParams, edge.bundle))
     ctrl.io.apb <> in
     sdram_bundle <> ctrl.io.sdram
     attach(sdram_dq, ctrl.sdram_dq)

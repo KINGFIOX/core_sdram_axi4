@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.Analog
 
-class SdramCoreIO extends Bundle {
+class SdramCoreIO(val p: SdramParams) extends Bundle {
   val inportWr = Input(UInt(4.W)) // strb
   val inportRd = Input(Bool())
   val inportLen = Input(UInt(8.W)) // burst len = 0
@@ -16,26 +16,13 @@ class SdramCoreIO extends Bundle {
   val inportError = Output(Bool())
   val inportReadData = Output(UInt(32.W))
 
-  val sdram = new SDRAMIO
+  val sdram = new SDRAMIO(p)
 }
 
-class SdramCore extends Module {
-  val io = IO(new SdramCoreIO)
+class SdramCore(val p: SdramParams = SdramParams()) extends Module {
+  val io = IO(new SdramCoreIO(p))
 
-  // --- Parameters (hardcoded as in original Verilog) ---
-  val SDRAM_MHZ = 50
-  val SDRAM_ADDR_W = 24
-  val SDRAM_COL_W = 9
-  val SDRAM_READ_LATENCY = 2
-
-  val SDRAM_BANK_W = 2
-  val SDRAM_DQM_W = 2
-  val SDRAM_BANKS = 1 << SDRAM_BANK_W // 4
-  val SDRAM_ROW_W = SDRAM_ADDR_W - SDRAM_COL_W - SDRAM_BANK_W // 13
-  val SDRAM_REFRESH_CNT = 1 << SDRAM_ROW_W // 8192
-  val SDRAM_START_DELAY = 100000 / (1000 / SDRAM_MHZ) // 5000
-  val SDRAM_REFRESH_CYCLES = (64000 * SDRAM_MHZ) / SDRAM_REFRESH_CNT - 1 // 389
-
+  // --- SDRAM command encodings ---
   val CMD_W = 4
   val CMD_INHIBIT = "b1111".U(CMD_W.W)
   val CMD_NOP = "b0111".U(CMD_W.W)
@@ -49,20 +36,13 @@ class SdramCore extends Module {
 
   // Mode: Burst Length = 2 (sequential), CAS=2
   // {3'b000, 1'b0, 2'b00, 3'b010, 1'b0, 3'b001} = 13'h0021
-  val MODE_REG = "h0021".U(SDRAM_ROW_W.W)
+  val MODE_REG = "h0021".U(p.rowW.W)
 
   val AUTO_PRECHARGE = 10
   val ALL_BANKS = 10
 
-  val SDRAM_DATA_W = 16
-  val CYCLE_TIME_NS = 1000 / SDRAM_MHZ // 20
-
-  val SDRAM_TRCD_CYCLES = (20 + (CYCLE_TIME_NS - 1)) / CYCLE_TIME_NS // 1
-  val SDRAM_TRP_CYCLES = (20 + (CYCLE_TIME_NS - 1)) / CYCLE_TIME_NS // 1
-  val SDRAM_TRFC_CYCLES = (60 + (CYCLE_TIME_NS - 1)) / CYCLE_TIME_NS // 3
-
   val DELAY_W = 4
-  val REFRESH_CNT_W = 17
+  val REFRESH_CNT_W = log2Ceil(p.startDelay + 101) + 1
 
   // --- External interface aliases (RamIO) ---
   val ramAddrW = io.inportAddr
@@ -72,12 +52,9 @@ class SdramCore extends Module {
   val ramReqW = ramWrW =/= 0.U || ramRdW
 
   // --- Address bit extraction ---
-  // addr_col_w = {{(ROW_W-COL_W){1'b0}}, ram_addr_w[COL_W:2], 1'b0}
-  val addrColW = Cat(0.U((SDRAM_ROW_W - SDRAM_COL_W).W), ramAddrW(SDRAM_COL_W, 2), 0.U(1.W))
-  // addr_row_w = ram_addr_w[SDRAM_ADDR_W : SDRAM_COL_W+2+1]
-  val addrRowW = ramAddrW(SDRAM_ADDR_W, SDRAM_COL_W + 3)
-  // addr_bank_w = ram_addr_w[SDRAM_COL_W+2 : SDRAM_COL_W+1]
-  val addrBankW = ramAddrW(SDRAM_COL_W + 2, SDRAM_COL_W + 1)
+  val addrColW = Cat(0.U((p.rowW - p.colW).W), ramAddrW(p.colW, 2), 0.U(1.W))
+  val addrRowW = ramAddrW(p.addrW, p.colW + 3)
+  val addrBankW = ramAddrW(p.colW + 2, p.colW + 1)
 
    // States
   object State extends ChiselEnum {
@@ -98,13 +75,13 @@ class SdramCore extends Module {
   io.sdram.ras := commandQ(2)
   io.sdram.cas := commandQ(1)
   io.sdram.we := commandQ(0)
-  val addrQ = RegInit(0.U(SDRAM_ROW_W.W)); io.sdram.addr := addrQ
-  val dqmQ = RegInit(0.U(SDRAM_DQM_W.W)); io.sdram.dqm := dqmQ
+  val addrQ = RegInit(0.U(p.rowW.W)); io.sdram.addr := addrQ
+  val dqmQ = RegInit(0.U(p.dqmW.W)); io.sdram.dqm := dqmQ
   val ckeQ = RegInit(false.B); io.sdram.cke := ckeQ
-  val bankQ = RegInit(0.U(SDRAM_BANK_W.W)); io.sdram.ba := bankQ
-  val dataOutQ = RegInit(0.U(SDRAM_DATA_W.W))
+  val bankQ = RegInit(0.U(p.bankW.W)); io.sdram.ba := bankQ
+  val dataOutQ = RegInit(0.U(p.dataW.W))
   // --- tri-state ---
-  val sdram_dq = IO(Analog(16.W))
+  val sdram_dq = IO(Analog(p.dataW.W))
   val dataInW = TriStateInBuf(sdram_dq, dataOutQ, RegNext( stateQ === State.write0 || stateQ === State.write1 ))
 
   // --- outputs: bus ---
@@ -112,11 +89,11 @@ class SdramCore extends Module {
   io.inportError := false.B
 
   // --- row open ---
-  val rowOpenQ = RegInit(0.U(SDRAM_BANKS.W))
-  val activeRowQ = RegInit(VecInit(Seq.fill(SDRAM_BANKS)(0.U(SDRAM_ROW_W.W))))
+  val rowOpenQ = RegInit(0.U(p.banks.W))
+  val activeRowQ = RegInit(VecInit(Seq.fill(p.banks)(0.U(p.rowW.W))))
 
   // --- Periodic refresh (after init) ---
-  val (_, refreshTick) = Counter(stateQ =/= State.init, SDRAM_REFRESH_CYCLES + 1)
+  val (_, refreshTick) = Counter(stateQ =/= State.init, p.refreshCycles + 1)
   val refreshQ = RegInit(false.B)
   when(refreshTick) {
     refreshQ := true.B
@@ -144,14 +121,14 @@ class SdramCore extends Module {
   // --- State Machine ---
   switch(stateQ) {
     is(State.init) {
-      val initTimerQ = RegInit((SDRAM_START_DELAY + 100).U(REFRESH_CNT_W.W)) // init timer
+      val initTimerQ = RegInit((p.startDelay + 100).U(REFRESH_CNT_W.W)) // init timer
       initTimerQ := initTimerQ - 1.U
 
       when(initTimerQ === 50.U) {
         ckeQ := true.B
       }.elsewhen(initTimerQ === 40.U) {
         commandQ := CMD_PRECHARGE
-        addrQ := withBit(0.U(SDRAM_ROW_W.W), ALL_BANKS, true.B)
+        addrQ := withBit(0.U(p.rowW.W), ALL_BANKS, true.B)
       }.elsewhen(initTimerQ === 20.U || initTimerQ === 30.U) {
         commandQ := CMD_REFRESH
       }.elsewhen(initTimerQ === 10.U) {
@@ -189,7 +166,7 @@ class SdramCore extends Module {
     }
 
     is(State.activate) {
-      gotoDelay(targetStateQ, SDRAM_TRCD_CYCLES) // read/write
+      gotoDelay(targetStateQ, p.trcdCycles) // read/write
 
       commandQ := CMD_ACTIVE
       addrQ := addrRowW
@@ -212,7 +189,7 @@ class SdramCore extends Module {
       addrQ := 0.U
       bankQ := 0.U
 
-      gotoDelay(State.idle, SDRAM_READ_LATENCY) // default
+      gotoDelay(State.idle, p.casLatency) // default
       when(!refreshQ && ramReqW && ramRdW) { // burst from axi4
         when(rowOpenQ(addrBankW) && addrRowW === activeRowQ(addrBankW)) {
           stateQ := State.read // renew state instead of delay
@@ -246,21 +223,21 @@ class SdramCore extends Module {
 
     is(State.precharge) {
       when(targetStateQ === State.refresh) {
-        gotoDelay(State.refresh, SDRAM_TRP_CYCLES)
+        gotoDelay(State.refresh, p.trpCycles)
         commandQ := CMD_PRECHARGE
-        addrQ := withBit(0.U(SDRAM_ROW_W.W), ALL_BANKS, true.B)
+        addrQ := withBit(0.U(p.rowW.W), ALL_BANKS, true.B)
         rowOpenQ := 0.U
       }.otherwise {
-        gotoDelay(State.activate, SDRAM_TRP_CYCLES)
+        gotoDelay(State.activate, p.trpCycles)
         commandQ := CMD_PRECHARGE
-        addrQ := withBit(0.U(SDRAM_ROW_W.W), ALL_BANKS, false.B)
+        addrQ := withBit(0.U(p.rowW.W), ALL_BANKS, false.B)
         bankQ := addrBankW
         rowOpenQ := rowOpenQ & ~(1.U << addrBankW)
       }
     }
 
     is(State.refresh) {
-      gotoDelay(State.idle, SDRAM_TRFC_CYCLES)
+      gotoDelay(State.idle, p.trfcCycles)
 
       commandQ := CMD_REFRESH
       addrQ := 0.U
@@ -278,8 +255,8 @@ class SdramCore extends Module {
   }
 
   // --- Read data pipeline ---
-  val sampleDataQ = ShiftRegister(dataInW, 2, 0.U(SDRAM_DATA_W.W), true.B)
-  val rdDelayed = ShiftRegister(stateQ === State.read, SDRAM_READ_LATENCY + 2, false.B, true.B)
+  val sampleDataQ = ShiftRegister(dataInW, 2, 0.U(p.dataW.W), true.B)
+  val rdDelayed = ShiftRegister(stateQ === State.read, p.casLatency + 2, false.B, true.B)
   io.inportReadData := Cat(sampleDataQ, RegNext(sampleDataQ))
   io.inportAck := RegNext( stateQ === State.write1 || rdDelayed )
 

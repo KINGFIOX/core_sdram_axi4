@@ -15,8 +15,10 @@ class SDRAMApbSimTop extends FixedIORawModule(new SDRAMApbOnlyInterface)
   override protected def implicitClock: Clock = io.clock
   override protected def implicitReset: Reset = io.reset
 
-  val ctrl = Module(new SdramApbTop)
-  val mem  = Module(new SdramMem)
+  val sdramParams = SdramParams()
+
+  val ctrl = Module(new SdramApbTop(sdramParams))
+  val mem  = Module(new SdramMem(sdramParams))
 
   ctrl.io.apb <> io.in
   mem.io <> ctrl.io.sdram
