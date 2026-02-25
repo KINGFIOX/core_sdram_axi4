@@ -90,12 +90,9 @@ class SdramCore extends Module {
   val commandQ = RegInit(CMD_INHIBIT)
   val addrQ = RegInit(0.U(SDRAM_ROW_W.W))
   val dataQ = RegInit(0.U(SDRAM_DATA_W.W))
-  val dataRdEnQ = RegInit(true.B)
   val dqmQ = RegInit(0.U(SDRAM_DQM_W.W))
   val ckeQ = RegInit(false.B)
   val bankQ = RegInit(0.U(SDRAM_BANK_W.W))
-  val dataBufferQ = RegInit(0.U(SDRAM_DATA_W.W))
-  val dqmBufferQ = RegInit(0.U(SDRAM_DQM_W.W))
   val refreshQ = RegInit(false.B)
 
   val rowOpenQ = RegInit(0.U(SDRAM_BANKS.W))
@@ -109,7 +106,7 @@ class SdramCore extends Module {
 
   // --- tri-state ---
   val sdram_dq = IO(Analog(16.W))
-  val data_input = TriStateInBuf(sdram_dq, dataQ, !dataRdEnQ)
+  val data_input = TriStateInBuf(sdram_dq, dataQ, RegNext( stateQ === State.write0 || stateQ === State.write1 ))
 
   // --- Refresh counter ---
   val refreshTimerQ = RegInit((SDRAM_START_DELAY + 100).U(REFRESH_CNT_W.W))
@@ -169,7 +166,6 @@ class SdramCore extends Module {
       commandQ := CMD_NOP
       addrQ := 0.U
       bankQ := 0.U
-      dataRdEnQ := true.B
 
       when(refreshQ) {
         when(rowOpenQ.orR) { stateQ := State.precharge }
@@ -211,12 +207,11 @@ class SdramCore extends Module {
       commandQ := CMD_NOP
       addrQ := 0.U
       bankQ := 0.U
-      dataRdEnQ := true.B
 
-      gotoDelay(State.idle, SDRAM_READ_LATENCY)
+      gotoDelay(State.idle, SDRAM_READ_LATENCY) // default
       when(!refreshQ && ramReqW && ramRdW) { // 连续读 -> 流水线
         when(rowOpenQ(addrBankW) && addrRowW === activeRowQ(addrBankW)) {
-          stateQ := State.read
+          stateQ := State.read // renew state instead of delay
         }
       }
     }
@@ -229,8 +224,6 @@ class SdramCore extends Module {
       bankQ := addrBankW
       dataQ := ramWriteDataW(15, 0)
       dqmQ := ~ramWrW(1, 0)
-      dqmBufferQ := ~ramWrW(3, 2)
-      dataRdEnQ := false.B
     }
 
     is(State.write1) {
@@ -242,9 +235,9 @@ class SdramCore extends Module {
       }
 
       commandQ := CMD_NOP
-      dataQ := dataBufferQ
+      dataQ := RegNext(ramWriteDataW(31, 16))
       addrQ := withBit(addrQ, AUTO_PRECHARGE, false.B)
-      dqmQ := dqmBufferQ
+      dqmQ := RegNext(~ramWrW(3, 2))
     }
 
     is(State.precharge) {
@@ -274,7 +267,6 @@ class SdramCore extends Module {
       commandQ := CMD_NOP
       addrQ := 0.U
       bankQ := 0.U
-      dataRdEnQ := true.B
 
       delayQ := delayQ - 1.U
       when(delayQ === 1.U) { stateQ := delayStateQ }
@@ -284,31 +276,12 @@ class SdramCore extends Module {
   // --- Read data pipeline ---
   val sampleDataQ = ShiftRegister(data_input, 2, 0.U(SDRAM_DATA_W.W), true.B)
   val rdDelayed = ShiftRegister(stateQ === State.read, SDRAM_READ_LATENCY + 2, false.B, true.B)
-
-  when(stateQ === State.write0) {
-    dataBufferQ := ramWriteDataW(31, 16)
-  }.elsewhen(rdDelayed) {
-    dataBufferQ := sampleDataQ
-  }
-
-  val ramReadDataW = Cat(sampleDataQ, dataBufferQ)
-
-  // --- ACK ---
-  val ackQ = RegInit(false.B)
-  when(stateQ === State.write1 || rdDelayed) {
-    ackQ := true.B
-  }.otherwise {
-    ackQ := false.B
-  }
-
-  // Accept command in READ or WRITE0 states
-  val ramAcceptW = stateQ === State.read || stateQ === State.write0
+  io.inportReadData := Cat(sampleDataQ, RegNext(sampleDataQ))
+  io.inportAck := RegNext( stateQ === State.write1 || rdDelayed )
 
   // --- Output assignments ---
-  io.inportAccept := ramAcceptW
-  io.inportAck := ackQ
+  io.inportAccept := stateQ === State.read || stateQ === State.write0
   io.inportError := false.B
-  io.inportReadData := ramReadDataW
 
   io.sdram.clk := (~clock.asUInt)
   io.sdram.cke := ckeQ
