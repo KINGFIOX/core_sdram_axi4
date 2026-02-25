@@ -279,11 +279,8 @@ class SdramCore extends Module {
   io.inportReadData := Cat(sampleDataQ, RegNext(sampleDataQ))
   io.inportAck := RegNext( stateQ === State.write1 || rdDelayed )
 
-  // Accept command in READ or WRITE0 states
-  val ramAcceptW = stateQ === State.read || stateQ === State.write0
-
   // --- Output assignments ---
-  io.inportAccept := ramAcceptW
+  io.inportAccept := stateQ === State.read || stateQ === State.write0
   io.inportError := false.B
 
   io.sdram.clk := (~clock.asUInt)
