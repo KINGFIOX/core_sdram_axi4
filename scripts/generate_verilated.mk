@@ -4,7 +4,7 @@
 OUTPUT_DIR       ?= build/verilated
 RTL_DIR          ?= build/rtl
 SRC_V_DIR        ?= src/verilog
-NAME             ?= SDRAMSimTop
+NAME             ?= $(TOP)
 
 RTL_SV_SRC       ?= $(shell find $(RTL_DIR) -name '*.sv')
 RTL_V_DIRS       ?= $(shell find $(RTL_DIR) -type d)

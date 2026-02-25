@@ -5,6 +5,14 @@ VERILATOR_SRC  ?= /usr/share/verilator/include
 SYSTEMC_HOME   ?= /usr/local/systemc-2.3.1
 SYSTEMC_LIBDIR ?= $(SYSTEMC_HOME)/lib-linux64
 
+CC             ?= ccache gcc
+CXX            ?= ccache g++
+
+OBJCACHE       ?= ccache
+
+export CC
+export CXX
+export OBJCACHE
 export VERILATOR_SRC
 export SYSTEMC_HOME
 export SYSTEMC_LIBDIR
@@ -13,12 +21,29 @@ GDB_DASHBOARD  ?= .gdb-dashboard
 GDB_ARGS       ?= --iterations 10 --trace 0
 
 ###############################################################################
+## Bus selection: make run BUS=apb  /  make run BUS=axi
+###############################################################################
+BUS ?= apb
+
+ifeq ($(BUS),apb)
+  TOP            = SDRAMApbSimTop
+  SRC_EXCLUDE    = src/cxx/sdram_axi.cpp src/cxx/tb_axi4_driver.cpp
+  BUS_CFLAGS     = -DBUS_APB
+else
+  TOP            = SDRAMAxiSimTop
+  SRC_EXCLUDE    = src/cxx/sdram_apb.cpp src/cxx/tb_apb_driver.cpp
+  BUS_CFLAGS     = -DBUS_AXI
+endif
+
+export TOP
+export SRC_EXCLUDE
+export BUS_CFLAGS
+
+###############################################################################
 ## Directories
 ###############################################################################
 BUILD_DIR  = build
 RTL_DIR    = $(BUILD_DIR)/rtl
-
-TOP  = SDRAMSimTop
 
 CHISEL_SRC = $(wildcard src/scala/*.scala)
 
@@ -35,7 +60,7 @@ init:
 elaborate: $(RTL_DIR)/$(TOP).sv
 
 $(RTL_DIR)/$(TOP).sv: $(CHISEL_SRC) build.sc common.sc
-	mill -i scala.runMain sdram.Elaborate $(CURDIR)/$(RTL_DIR)
+	mill -i scala.runMain sdram.Elaborate $(CURDIR)/$(RTL_DIR) $(BUS)
 
 build: elaborate
 	make -f scripts/generate_verilated.mk

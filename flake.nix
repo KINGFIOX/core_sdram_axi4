@@ -114,10 +114,12 @@
 
                   echo "=== SDRAM AXI4 仿真环境已就绪 ==="
                   echo "  Mill version: $(mill --version 2>&1 | head -1)"
-                  echo "  make elaborate — Chisel 生成 SystemVerilog"
-                  echo "  make run       — 编译并运行仿真"
-                  echo "  make gdb       — 用 GDB + Dashboard 调试"
-                  echo "  make view      — 用 GTKWave 查看波形"
+                  echo "  make elaborate   — Chisel 生成 SystemVerilog"
+                  echo "  make run BUS=apb — 编译并运行 APB 仿真"
+                  echo "  make run BUS=axi — 编译并运行 AXI4 仿真"
+                  echo "  make run         — 默认编译运行 APB 仿真"
+                  echo "  make gdb         — 用 GDB + Dashboard 调试"
+                  echo "  make view        — 用 GTKWave 查看波形"
                 '';
               }
             );

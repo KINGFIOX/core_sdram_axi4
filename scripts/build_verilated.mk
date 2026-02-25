@@ -1,7 +1,7 @@
 ###############################################################################
 # Variables
 ###############################################################################
-CXX            ?= g++
+CXX            ?= ccache g++
 VERILATOR_SRC  ?= /usr/share/verilator/include
 SYSTEMC_HOME   ?= /usr/local/systemc-2.3.1
 SYSTEMC_LIBDIR ?= $(SYSTEMC_HOME)/lib-linux64

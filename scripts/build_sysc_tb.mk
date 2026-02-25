@@ -1,8 +1,8 @@
 ###############################################################################
 # Variables
 ###############################################################################
-CC             ?= gcc
-CXX            ?= g++
+CC             ?= ccache gcc
+CXX            ?= ccache g++
 VERILATOR_SRC  ?= /usr/share/verilator/include
 SYSTEMC_HOME   ?= /usr/local/systemc-2.3.1
 SYSTEMC_LIBDIR ?= $(SYSTEMC_HOME)/lib-linux64
@@ -30,6 +30,7 @@ LIBS          = -lsyscverilated
 CFLAGS       ?= -fpic -O2
 CFLAGS       += $(patsubst %,-I%,$(INCLUDE_PATH))
 CFLAGS       += -DVM_TRACE=1
+CFLAGS       += $(BUS_CFLAGS)
 LDFLAGS      ?= -O2
 LDFLAGS      += -L$(SYSTEMC_LIBDIR) 
 LDFLAGS      += $(patsubst %,-L%,$(LIB_PATH))
@@ -40,6 +41,8 @@ EXTRA_CLEAN_FILES ?=
 src2obj       = $(OBJ_DIR)$(patsubst %$(suffix $(1)),%.o,$(notdir $(1)))
 SRC_CXX      ?= $(foreach src,$(SRC_DIR),$(wildcard $(src)/*.cpp))
 SRC_C        ?= $(foreach src,$(SRC_DIR),$(wildcard $(src)/*.c))
+SRC_CXX      := $(filter-out $(addprefix %/,$(notdir $(SRC_EXCLUDE))),$(SRC_CXX))
+SRC_C        := $(filter-out $(addprefix %/,$(notdir $(SRC_EXCLUDE))),$(SRC_C))
 SRC          ?= $(SRC_CXX) $(SRC_C)
 OBJ          ?= $(foreach src,$(SRC),$(call src2obj,$(src)))
 

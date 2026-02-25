@@ -7,6 +7,7 @@ import freechips.rocketchip.amba.apb._
 import org.chipsalliance.diplomacy.lazymodule._
 import freechips.rocketchip.diplomacy.{AddressSet}
 import org.chipsalliance.cde.config.Parameters
+import os.read
 
 class SdramApbTop(apbParams: APBBundleParameters = APBBundleParameters(addrBits = 32, dataBits = 32)) extends Module {
   val io = IO(new Bundle {
@@ -14,51 +15,64 @@ class SdramApbTop(apbParams: APBBundleParameters = APBBundleParameters(addrBits 
     val sdram = new SDRAMIO
   })
 
-  val core = Module(new SdramAxiCore)
+  // --- modules ----
+  private val core = Module(new SdramCore)
+  core.io.inportLen := 0.U // always: burst len = 0
+  core.io.inportWr := 0.U // default
+  core.io.inportRd := false.B
+  core.io.inportAddr := io.apb.paddr
+  core.io.inportWriteData := io.apb.pwdata
+
+  // --- status ----
+  private val stateQ = RegInit(State.idle)
+  private val rdataQ  = Reg(UInt(32.W))
+  private val slverrQ = RegInit(false.B)
+
+  // --- wires ----
+  private val reqAcceptW = core.io.inportAccept // accept request
+  private val reqAckW = core.io.inportAck // finish
+  private val apbSetupW = io.apb.psel
 
   // APB standard state machine
   object State extends ChiselEnum {
     val idle, setup, access, ready = Value
   }
 
-  val state = RegInit(State.idle)
-  val reqAccept = core.io.inportAccept
-
-  switch(state) {
+  switch(stateQ) {
     is(State.idle) {
-      when(io.apb.psel) {
-        state := Mux(reqAccept, State.ready, State.setup)
+      when(apbSetupW) {
+        stateQ := State.setup
       }
     }
     is(State.setup) {
-      state := Mux(reqAccept, State.ready, State.access)
+      when(io.apb.pwrite) {
+        core.io.inportWr := io.apb.pstrb
+      } .otherwise {
+        core.io.inportRd := true.B
+      }
+      when(reqAcceptW) { stateQ := State.access }
     }
     is(State.access) {
-      when(reqAccept) {
-        state := State.ready
+      when(reqAckW) {
+        stateQ := State.ready
+        rdataQ  := core.io.inportReadData
+        slverrQ := core.io.inportError
       }
     }
     is(State.ready) {
-      when(core.io.inportAck) {
-        state := State.idle
+      assert(io.apb.psel, "impossible: APB psel is not asserted in ready state")
+      when(io.apb.penable) {
+        stateQ := State.idle
+        slverrQ := false.B // reset
+        rdataQ := 0.U
       }
     }
   }
 
-  // idle 检测到 APB setup phase 时组合发起请求，setup/access 阶段持续发起直到 core accept
-  val isWrite = (state === State.setup || state === State.access) && io.apb.pwrite
-
-  // SdramAxiCore connections
-  core.io.inportWr        := Mux(isWrite, io.apb.pstrb, 0.U)
-  core.io.inportRd        := (state === State.setup || state === State.access) && !io.apb.pwrite
-  core.io.inportLen       := 0.U
-  core.io.inportAddr      := io.apb.paddr
-  core.io.inportWriteData := io.apb.pwdata
-
   // APB slave outputs
-  io.apb.pready  := core.io.inportAck
-  io.apb.pslverr := core.io.inportError
-  io.apb.prdata  := core.io.inportReadData
+  io.apb.pready  := stateQ === State.ready
+  io.apb.pslverr := slverrQ
+  io.apb.prdata  := rdataQ
 
   // SDRAM outputs
   io.sdram <> core.io.sdram

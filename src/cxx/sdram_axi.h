@@ -5,7 +5,8 @@
 
 #include "axi4.h"
 
-class VSDRAMSimTop;
+class VSDRAMAxiSimTop;
+
 class VerilatedVcdSc;
 
 //-------------------------------------------------------------
@@ -98,7 +99,7 @@ private:
   sc_signal<bool> m_in_r_bits_last;
 
 public:
-  VSDRAMSimTop *m_rtl;
+  VSDRAMAxiSimTop *m_rtl;
 #if VM_TRACE
   VerilatedVcdSc *m_vcd;
   bool m_delay_waves;

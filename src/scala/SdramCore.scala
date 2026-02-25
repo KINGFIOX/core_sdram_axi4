@@ -4,10 +4,10 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.Analog
 
-class SdramAxiCoreIO extends Bundle {
+class SdramCoreIO extends Bundle {
   val inportWr = Input(UInt(4.W)) // strb
   val inportRd = Input(Bool())
-  val inportLen = Input(UInt(8.W))
+  val inportLen = Input(UInt(8.W)) // burst len = 0
   val inportAddr = Input(UInt(32.W))
   val inportWriteData = Input(UInt(32.W))
 
@@ -19,8 +19,8 @@ class SdramAxiCoreIO extends Bundle {
   val sdram = new SDRAMIO
 }
 
-class SdramAxiCore extends Module {
-  val io = IO(new SdramAxiCoreIO)
+class SdramCore extends Module {
+  val io = IO(new SdramCoreIO)
 
   // --- Parameters (hardcoded as in original Verilog) ---
   val SDRAM_MHZ = 50

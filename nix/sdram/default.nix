@@ -2,7 +2,7 @@
 lib.makeScope newScope (
   scope:
   let
-    designTarget = "SDRAMSimTop";
+    designTarget = "SDRAMApbSimTop";
   in
   {
     dependencies = scope.callPackage ../dependencies { };

@@ -1,6 +1,5 @@
-
 #include "sdram_axi.h"
-#include "VSDRAMSimTop.h"
+#include "VSDRAMAxiSimTop.h"
 
 #if VM_TRACE
 #include "verilated.h"
@@ -11,7 +10,7 @@
 // Constructor
 //-------------------------------------------------------------
 sdram_axi::sdram_axi(sc_module_name name) : sc_module(name) {
-  m_rtl = new VSDRAMSimTop("VSDRAMSimTop");
+  m_rtl = new VSDRAMAxiSimTop("VSDRAMAxiSimTop");
 
   m_rtl->clock(m_clk_in);
   m_rtl->reset(m_rst_in);

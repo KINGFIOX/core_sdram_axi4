@@ -8,7 +8,6 @@ import org.chipsalliance.diplomacy.lazymodule._
 import freechips.rocketchip.diplomacy.{AddressSet, TransferSizes}
 import org.chipsalliance.cde.config.Parameters
 
-// sdram io without sdram_dq
 class SDRAMIO extends Bundle {
   val clk = Output(Bool())
   val cke = Output(Bool())
@@ -27,7 +26,7 @@ class SdramAxiTop(axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBit
     val sdram = new SDRAMIO
   })
   val pmem = Module(new SdramAxiPmem(axiParams))
-  val core = Module(new SdramAxiCore)
+  val core = Module(new SdramCore)
 
   pmem.io.axi <> io.axi
 
