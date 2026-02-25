@@ -51,13 +51,6 @@ class SdramCore extends Module {
   // {3'b000, 1'b0, 2'b00, 3'b010, 1'b0, 3'b001} = 13'h0021
   val MODE_REG = "h0021".U(SDRAM_ROW_W.W)
 
-  // States
-  object State extends ChiselEnum {
-    //   0      1     2       3       4        5        6       7        8         9
-    val init, delay, idle, activate, read, read_wait, write0, write1, precharge, refresh = Value
-  }
-  State.all.foreach { s => println(s"State: ${s} = ${s.litValue}") }
-
   val AUTO_PRECHARGE = 10
   val ALL_BANKS = 10
 
@@ -86,38 +79,46 @@ class SdramCore extends Module {
   // addr_bank_w = ram_addr_w[SDRAM_COL_W+2 : SDRAM_COL_W+1]
   val addrBankW = ramAddrW(SDRAM_COL_W + 2, SDRAM_COL_W + 1)
 
-  // --- Registers ---
-  val commandQ = RegInit(CMD_INHIBIT)
-  val addrQ = RegInit(0.U(SDRAM_ROW_W.W))
-  val dataQ = RegInit(0.U(SDRAM_DATA_W.W))
-  val dqmQ = RegInit(0.U(SDRAM_DQM_W.W))
-  val ckeQ = RegInit(false.B)
-  val bankQ = RegInit(0.U(SDRAM_BANK_W.W))
-  val refreshQ = RegInit(false.B)
+   // States
+  object State extends ChiselEnum {
+    //   0      1     2       3       4        5        6       7        8         9
+    val init, delay, idle, activate, read, read_wait, write0, write1, precharge, refresh = Value
+  }
+  State.all.foreach { s => println(s"State: ${s} = ${s.litValue}") } // print during elaboration
 
-  val rowOpenQ = RegInit(0.U(SDRAM_BANKS.W))
-  val activeRowQ = RegInit(VecInit(Seq.fill(SDRAM_BANKS)(0.U(SDRAM_ROW_W.W))))
-
+  // --- state machine ---
   val stateQ = RegInit(State.init)
   val targetStateQ = RegInit(State.idle)
   val delayStateQ = RegInit(State.idle)
-
   val delayQ = RegInit(0.U(DELAY_W.W))
 
+  // --- outputs: sdram ---
+  val commandQ = RegInit(CMD_INHIBIT)
+  io.sdram.cs := commandQ(3)
+  io.sdram.ras := commandQ(2)
+  io.sdram.cas := commandQ(1)
+  io.sdram.we := commandQ(0)
+  val addrQ = RegInit(0.U(SDRAM_ROW_W.W)); io.sdram.addr := addrQ
+  val dqmQ = RegInit(0.U(SDRAM_DQM_W.W)); io.sdram.dqm := dqmQ
+  val ckeQ = RegInit(false.B); io.sdram.cke := ckeQ
+  val bankQ = RegInit(0.U(SDRAM_BANK_W.W)); io.sdram.ba := bankQ
+  val dataOutQ = RegInit(0.U(SDRAM_DATA_W.W))
   // --- tri-state ---
   val sdram_dq = IO(Analog(16.W))
-  val data_input = TriStateInBuf(sdram_dq, dataQ, RegNext( stateQ === State.write0 || stateQ === State.write1 ))
+  val dataInW = TriStateInBuf(sdram_dq, dataOutQ, RegNext( stateQ === State.write0 || stateQ === State.write1 ))
 
-  // --- Refresh counter ---
-  val refreshTimerQ = RegInit((SDRAM_START_DELAY + 100).U(REFRESH_CNT_W.W))
+  // --- outputs: bus ---
+  io.inportAccept := stateQ === State.read || stateQ === State.write0
+  io.inportError := false.B
 
-  when(refreshTimerQ === 0.U) {
-    refreshTimerQ := SDRAM_REFRESH_CYCLES.U
-  }.otherwise {
-    refreshTimerQ := refreshTimerQ - 1.U
-  }
+  // --- row open ---
+  val rowOpenQ = RegInit(0.U(SDRAM_BANKS.W))
+  val activeRowQ = RegInit(VecInit(Seq.fill(SDRAM_BANKS)(0.U(SDRAM_ROW_W.W))))
 
-  when(refreshTimerQ === 0.U) {
+  // --- Periodic refresh (after init) ---
+  val (_, refreshTick) = Counter(stateQ =/= State.init, SDRAM_REFRESH_CYCLES + 1)
+  val refreshQ = RegInit(false.B)
+  when(refreshTick) {
     refreshQ := true.B
   }.elsewhen(stateQ === State.refresh) {
     refreshQ := false.B
@@ -143,18 +144,21 @@ class SdramCore extends Module {
   // --- State Machine ---
   switch(stateQ) {
     is(State.init) {
-      when(refreshQ) { stateQ := State.idle }
+      val initTimerQ = RegInit((SDRAM_START_DELAY + 100).U(REFRESH_CNT_W.W)) // init timer
+      initTimerQ := initTimerQ - 1.U
 
-      when(refreshTimerQ === 50.U) {
+      when(initTimerQ === 50.U) {
         ckeQ := true.B
-      }.elsewhen(refreshTimerQ === 40.U) {
+      }.elsewhen(initTimerQ === 40.U) {
         commandQ := CMD_PRECHARGE
         addrQ := withBit(0.U(SDRAM_ROW_W.W), ALL_BANKS, true.B)
-      }.elsewhen(refreshTimerQ === 20.U || refreshTimerQ === 30.U) {
+      }.elsewhen(initTimerQ === 20.U || initTimerQ === 30.U) {
         commandQ := CMD_REFRESH
-      }.elsewhen(refreshTimerQ === 10.U) {
+      }.elsewhen(initTimerQ === 10.U) {
         commandQ := CMD_LOAD_MODE
         addrQ := MODE_REG
+      }.elsewhen(initTimerQ === 0.U) {
+        stateQ := State.idle
       }.otherwise {
         commandQ := CMD_NOP
         addrQ := 0.U
@@ -167,7 +171,7 @@ class SdramCore extends Module {
       addrQ := 0.U
       bankQ := 0.U
 
-      when(refreshQ) {
+      when(refreshQ) { // refresh come first
         when(rowOpenQ.orR) { stateQ := State.precharge }
           .otherwise        { stateQ := State.refresh }
         targetStateQ := State.refresh
@@ -209,7 +213,7 @@ class SdramCore extends Module {
       bankQ := 0.U
 
       gotoDelay(State.idle, SDRAM_READ_LATENCY) // default
-      when(!refreshQ && ramReqW && ramRdW) { // 连续读 -> 流水线
+      when(!refreshQ && ramReqW && ramRdW) { // burst from axi4
         when(rowOpenQ(addrBankW) && addrRowW === activeRowQ(addrBankW)) {
           stateQ := State.read // renew state instead of delay
         }
@@ -222,7 +226,7 @@ class SdramCore extends Module {
       commandQ := CMD_WRITE
       addrQ := withBit(addrColW, AUTO_PRECHARGE, false.B)
       bankQ := addrBankW
-      dataQ := ramWriteDataW(15, 0)
+      dataOutQ := ramWriteDataW(15, 0)
       dqmQ := ~ramWrW(1, 0)
     }
 
@@ -235,7 +239,7 @@ class SdramCore extends Module {
       }
 
       commandQ := CMD_NOP
-      dataQ := RegNext(ramWriteDataW(31, 16))
+      dataOutQ := RegNext(ramWriteDataW(31, 16))
       addrQ := withBit(addrQ, AUTO_PRECHARGE, false.B)
       dqmQ := RegNext(~ramWrW(3, 2))
     }
@@ -274,22 +278,10 @@ class SdramCore extends Module {
   }
 
   // --- Read data pipeline ---
-  val sampleDataQ = ShiftRegister(data_input, 2, 0.U(SDRAM_DATA_W.W), true.B)
+  val sampleDataQ = ShiftRegister(dataInW, 2, 0.U(SDRAM_DATA_W.W), true.B)
   val rdDelayed = ShiftRegister(stateQ === State.read, SDRAM_READ_LATENCY + 2, false.B, true.B)
   io.inportReadData := Cat(sampleDataQ, RegNext(sampleDataQ))
   io.inportAck := RegNext( stateQ === State.write1 || rdDelayed )
 
-  // --- Output assignments ---
-  io.inportAccept := stateQ === State.read || stateQ === State.write0
-  io.inportError := false.B
-
   io.sdram.clk := (~clock.asUInt)
-  io.sdram.cke := ckeQ
-  io.sdram.cs := commandQ(3)
-  io.sdram.ras := commandQ(2)
-  io.sdram.cas := commandQ(1)
-  io.sdram.we := commandQ(0)
-  io.sdram.dqm := dqmQ
-  io.sdram.ba := bankQ
-  io.sdram.addr := addrQ
 }
