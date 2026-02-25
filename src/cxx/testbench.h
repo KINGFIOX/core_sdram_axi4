@@ -1,10 +1,10 @@
 #include "testbench_vbase.h"
+#include <cstring>
 #include <systemc.h>
 
 #include "tb_axi4_driver.h"
 #include "tb_mem_test.h"
 #include "tb_memory.h"
-#include "tb_sdram_mem.h"
 
 #include "sdram_axi.h"
 
@@ -19,14 +19,10 @@ public:
   tb_axi4_driver *m_driver;
   tb_mem_test *m_sequencer;
   sdram_axi *m_dut;
-  tb_sdram_mem *m_mem;
   int m_num_iterations;
 
   sc_signal<axi4_master> axi_m;
   sc_signal<axi4_slave> axi_s;
-
-  sc_signal<sdram_io_master> sdram_io_m;
-  sc_signal<sdram_io_slave> sdram_io_s;
 
   void set_iterations(int iterations) { m_num_iterations = iterations; }
 
@@ -39,18 +35,11 @@ public:
 
     m_driver->enable_delays(true);
 
-    // Allocate some memory
-    m_mem->add_region(MEM_BASE, MEM_SIZE);
-
-    // Allocate some memory
     m_sequencer->add_region(MEM_BASE, MEM_SIZE);
     m_sequencer->trace_access(true);
 
-    // Initialise to memory known value
-    for (int i = 0; i < MEM_SIZE; i++) {
-      m_sequencer->write(MEM_BASE + i, i);
-      m_mem->write(MEM_BASE + i, i);
-    }
+    // Zero-init reference memory (DPI-C static array is naturally zero)
+    memset(m_sequencer->get_array(MEM_BASE), 0, MEM_SIZE);
 
     m_sequencer->start(m_num_iterations);
     m_sequencer->wait_complete();
@@ -59,8 +48,6 @@ public:
 
   void init_trace(void) {
     verilator_trace_enable("verilator.vcd", m_dut);
-    sc_trace_file *tf = sc_create_vcd_trace_file("systemc");
-    m_mem->add_trace(tf, "tb.TB_MEM.");
   }
 
   SC_HAS_PROCESS(testbench);
@@ -78,13 +65,5 @@ public:
     m_dut->rst_in(rst);
     m_dut->inport_in(axi_m);
     m_dut->inport_out(axi_s);
-    m_dut->sdram_out(sdram_io_m);
-    m_dut->sdram_in(sdram_io_s);
-
-    m_mem = new tb_sdram_mem("TB_MEM");
-    m_mem->clk_in(clk);
-    m_mem->rst_in(rst);
-    m_mem->sdram_in(sdram_io_m);
-    m_mem->sdram_out(sdram_io_s);
   }
 };

@@ -18,7 +18,7 @@ class sdram_cmd extends BlackBox {
 class SdramMem extends RawModule {
   val io = IO(Flipped(new SDRAMIO))
   val sdram_dq = IO(Analog(16.W))
-  val clock = io.clk.asClock
+  val clock = ( ~ io.clk.asBool ).asClock
   val reset = ( io.cs ).asAsyncReset
   val module = withClockAndReset(clock, reset) { Module(new SdramMemImpl) }
   module.io.cke_n := io.cke
@@ -31,7 +31,7 @@ class SdramMem extends RawModule {
   module.io.data_input := TriStateInBuf( sdram_dq, module.io.data_output, module.io.data_out_en )
 }
 
-class SdramMemImpl extends Module {
+class SdramMemImpl extends Module with RequireAsyncReset {
   private val WIDTH_BANK  = 2
   private val WIDTH_COLS  = 9
   private val WIDTH_ROWS  = 13

@@ -4,13 +4,12 @@
 #include <systemc.h>
 
 #include "axi4.h"
-#include "sdram_io.h"
 
 class VSDRAMSimTop;
 class VerilatedVcdSc;
 
 //-------------------------------------------------------------
-// sdram_axi: RTL wrapper class
+// sdram_axi: RTL wrapper class (AXI4 only, SDRAM is internal)
 //-------------------------------------------------------------
 class sdram_axi : public sc_module {
 public:
@@ -19,8 +18,6 @@ public:
 
   sc_in<axi4_master> inport_in;
   sc_out<axi4_slave> inport_out;
-  sc_in<sdram_io_slave> sdram_in;
-  sc_out<sdram_io_master> sdram_out;
 
   //-------------------------------------------------------------
   // Constructor
@@ -39,8 +36,6 @@ public:
     TRACE_SIGNAL(rst_in);
     TRACE_SIGNAL(inport_in);
     TRACE_SIGNAL(inport_out);
-    TRACE_SIGNAL(sdram_in);
-    TRACE_SIGNAL(sdram_out);
 
 #undef TRACE_SIGNAL
   }
@@ -85,10 +80,6 @@ private:
   // R channel
   sc_signal<bool> m_in_r_ready;
 
-  // SDRAM dq input (SC port from --pins-inout-enables)
-  // tri-state
-  sc_signal<sc_uint<16>> m_sdram_dq;
-
   // Outputs: AW ready
   sc_signal<bool> m_in_aw_ready;
   // W ready
@@ -105,17 +96,6 @@ private:
   sc_signal<sc_uint<2>> m_in_r_bits_resp;
   sc_signal<sc_uint<4>> m_in_r_bits_id;
   sc_signal<bool> m_in_r_bits_last;
-
-  // SDRAM outputs
-  sc_signal<bool> m_sdram_clk;
-  sc_signal<bool> m_sdram_cke;
-  sc_signal<bool> m_sdram_cs;
-  sc_signal<bool> m_sdram_ras;
-  sc_signal<bool> m_sdram_cas;
-  sc_signal<bool> m_sdram_we;
-  sc_signal<sc_uint<2>> m_sdram_dqm;
-  sc_signal<sc_uint<13>> m_sdram_addr;
-  sc_signal<sc_uint<2>> m_sdram_ba;
 
 public:
   VSDRAMSimTop *m_rtl;

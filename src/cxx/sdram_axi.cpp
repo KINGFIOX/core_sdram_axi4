@@ -55,29 +55,10 @@ sdram_axi::sdram_axi(sc_module_name name) : sc_module(name) {
   m_rtl->in_r_bits_id(m_in_r_bits_id);
   m_rtl->in_r_bits_last(m_in_r_bits_last);
 
-  // SDRAM
-  m_rtl->sdram_clk(m_sdram_clk);
-  m_rtl->sdram_cke(m_sdram_cke);
-  m_rtl->sdram_cs(m_sdram_cs);
-  m_rtl->sdram_ras(m_sdram_ras);
-  m_rtl->sdram_cas(m_sdram_cas);
-  m_rtl->sdram_we(m_sdram_we);
-  m_rtl->sdram_dqm(m_sdram_dqm);
-  m_rtl->sdram_addr(m_sdram_addr);
-  m_rtl->sdram_ba(m_sdram_ba);
-  m_rtl->sdram_dq(m_sdram_dq);
-
-  // 这里使用 sc_method, 而不是 sc_cthread
-  // verilated sdram_axi, 他内部有自己维护的 sc_cthread 之类的
-  // 我们这里只用做连线就好了: 将结构化的 axi4_master, axi4_slave 转换成 一根根的 sc_signal
-  // 因为 sram_axi 对外的信号线是一根根的 sc_signal, 而不是我们这里包装的 axi4_master, axi4_slave
-  // 连线是 纯组合逻辑, 所以用 sc_method
-  // 因为是纯组合逻辑, 所以就需要将所有的信号都加入到敏感列表中, 类似于 always @(*)
   SC_METHOD(async_outputs);
   sensitive << clk_in;
   sensitive << rst_in;
   sensitive << inport_in;
-  sensitive << sdram_in;
   sensitive << m_in_aw_ready;
   sensitive << m_in_w_ready;
   sensitive << m_in_b_valid;
@@ -89,15 +70,6 @@ sdram_axi::sdram_axi(sc_module_name name) : sc_module(name) {
   sensitive << m_in_r_bits_resp;
   sensitive << m_in_r_bits_id;
   sensitive << m_in_r_bits_last;
-  sensitive << m_sdram_clk;
-  sensitive << m_sdram_cke;
-  sensitive << m_sdram_cs;
-  sensitive << m_sdram_ras;
-  sensitive << m_sdram_cas;
-  sensitive << m_sdram_we;
-  sensitive << m_sdram_dqm;
-  sensitive << m_sdram_addr;
-  sensitive << m_sdram_ba;
 
 #if VM_TRACE
   m_vcd = NULL;
@@ -169,28 +141,4 @@ void sdram_axi::async_outputs(void) {
   inport_o.RID = m_in_r_bits_id.read();
   inport_o.RLAST = m_in_r_bits_last.read();
   inport_out.write(inport_o);
-
-  // SDRAM: simulate tristate bus
-  // devide tri-state dq into dq_out dq_en,
-  sdram_io_slave sdram_i = sdram_in.read();
-  uint16_t dq_out = m_rtl->sdram_dq__out;
-  uint16_t dq_en = m_rtl->sdram_dq__en;
-
-  if (dq_en != 0) m_sdram_dq.write((sc_uint<16>)dq_out);
-  else m_sdram_dq.write(sdram_i.DATA_INPUT);
-
-  // SDRAM outputs
-  sdram_io_master sdram_o;
-  sdram_o.CLK = m_sdram_clk.read();
-  sdram_o.CKE = m_sdram_cke.read();
-  sdram_o.CS = m_sdram_cs.read();
-  sdram_o.RAS = m_sdram_ras.read();
-  sdram_o.CAS = m_sdram_cas.read();
-  sdram_o.WE = m_sdram_we.read();
-  sdram_o.DQM = m_sdram_dqm.read();
-  sdram_o.ADDR = m_sdram_addr.read();
-  sdram_o.BA = m_sdram_ba.read();
-  sdram_o.DATA_OUTPUT = dq_out;
-  sdram_o.DATA_OUT_EN = (dq_en != 0) ? 1 : 0;
-  sdram_out.write(sdram_o);
 }

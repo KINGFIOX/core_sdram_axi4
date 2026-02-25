@@ -10,7 +10,7 @@ EXTRA_V_SRC      ?= $(wildcard $(SRC_V_DIR)/*.v)
 
 # Verilator options
 VERILATE_PARAMS  ?= --trace
-VERILATOR_OPTS   ?= --pins-sc-uint --pins-inout-enables
+VERILATOR_OPTS   ?= --pins-sc-uint
 
 TARGETS          ?= $(OUTPUT_DIR)/V$(NAME)
 
