@@ -65,8 +65,6 @@ public:
 protected:
   bool m_enable_delays;
 
-  bool m_configured;
-
   typedef enum eBurstType {
     BURST_TYPE_SEQUENTIAL,
     BURST_TYPE_INTERLEAVED

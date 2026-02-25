@@ -1,7 +1,7 @@
-import "DPI-C" function void sdram_read(input int addr, output byte data);
-import "DPI-C" function void sdram_write(input int addr, input byte data);
+import "DPI-C" function void sdram_read(input int addr, output short data);
+import "DPI-C" function void sdram_write(input int addr, input short data);
 
-module psram_cmd(
+module sdram_cmd(
   input clock,
   input valid,
   input wen,
@@ -10,6 +10,7 @@ module psram_cmd(
   output reg [15:0] rdata
 );
   always@(posedge clock) begin
+    rdata <= 0;
     if (valid) begin
       if (wen) begin
         sdram_write(addr, wdata);

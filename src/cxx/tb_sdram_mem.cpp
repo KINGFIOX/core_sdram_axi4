@@ -71,11 +71,10 @@ void tb_sdram_mem::process(void) {
 
     // Configure SDRAM
     if (new_cmd == SDRAM_CMD_LOAD_MODE) {
-      m_configured = true;
       m_burst_type = (tBurstType)(int)sdram_i.ADDR[3];
       m_write_burst_en = (bool)!sdram_i.ADDR[9];
       m_burst_length = (tBurstLength)(int)sdram_i.ADDR.range(2, 0);
-      printf("burst_length: %d\n", m_burst_length);
+      printf("burst_length: %d, write_burst_en: %d\n", m_burst_length, m_write_burst_en);
       m_cas_latency = (int)sdram_i.ADDR.range(6, 4);
 
       // 绝大多数场景, burst_type 都是 sequential, interleaved
@@ -90,7 +89,6 @@ void tb_sdram_mem::process(void) {
     }
     // Row is activated and copied into the row buffer of the bank
     else if (new_cmd == SDRAM_CMD_ACTIVE) {
-      sc_assert(m_configured); // 必须先配置了 mode register 才能激活 row
 
       bank = sdram_i.BA;
       row = sdram_i.ADDR;
@@ -103,8 +101,6 @@ void tb_sdram_mem::process(void) {
     }
     // Read command
     else if (new_cmd == SDRAM_CMD_READ) {
-      sc_assert(m_configured);
-      bool en_ap = sdram_i.ADDR[SDRAM_COL_W];
       col = sdram_i.ADDR;
       bank = sdram_i.BA;
       row = m_active_row[bank];
@@ -134,9 +130,7 @@ void tb_sdram_mem::process(void) {
     }
     // Write command
     else if (new_cmd == SDRAM_CMD_WRITE) {
-      sc_assert(m_configured);
 
-      bool en_ap = sdram_i.ADDR[SDRAM_COL_W];
       col = sdram_i.ADDR;
       bank = sdram_i.BA;
       row = m_active_row[bank];
@@ -174,8 +168,6 @@ void tb_sdram_mem::process(void) {
     }
     // Row is precharged and stored back into the memory array
     else if (new_cmd == SDRAM_CMD_PRECHARGE) {
-      sc_assert(m_configured);
-
       // All banks
       if (sdram_i.ADDR[10]) {
         // Close rows

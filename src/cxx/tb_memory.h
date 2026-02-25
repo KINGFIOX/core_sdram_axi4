@@ -27,14 +27,14 @@ public:
 
   void write(uint32_t addr, uint8_t data) {
     if (match(addr)) {
-      if (m_trace) printf("WRITE: %08x=%02x\n", addr, data);
+      // if (m_trace) printf("WRITE: %08x=%02x\n", addr, data);
       m_mem[addr - m_base] = data;
     }
   }
 
   uint8_t read(uint32_t addr) {
     if (match(addr)) {
-      if (m_trace) printf("READ: %08x=%02x\n", addr, m_mem[addr - m_base]);
+      // if (m_trace) printf("READ: %08x=%02x\n", addr, m_mem[addr - m_base]);
       return m_mem[addr - m_base];
     } else
       return 0;
