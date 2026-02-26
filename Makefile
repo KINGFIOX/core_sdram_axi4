@@ -23,7 +23,7 @@ GDB_ARGS       ?= --iterations 10 --trace 0
 ###############################################################################
 ## Bus selection: make run BUS=apb  /  make run BUS=axi
 ###############################################################################
-BUS ?= apb
+BUS ?= axi
 
 ifeq ($(BUS),apb)
   TOP            = SDRAMApbSimTop
