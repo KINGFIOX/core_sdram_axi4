@@ -70,16 +70,16 @@ class SdramCore(val p: SdramParams = SdramParams()) extends Module {
   val delayQ = RegInit(0.U(DELAY_W.W))
 
   // --- outputs: sdram ---
-  val commandQ = RegInit(CMD_INHIBIT)
+  val commandW = WireInit(CMD_NOP); val commandQ = RegNext(commandW, CMD_INHIBIT)
   io.sdram.cs := commandQ(3)
   io.sdram.ras := commandQ(2)
   io.sdram.cas := commandQ(1)
   io.sdram.we := commandQ(0)
+  val dqmW = WireInit("b11".U(p.dqmW.W)); val dqmQ = RegNext(dqmW); io.sdram.dqm := dqmQ
   val addrQ = RegInit(0.U(p.rowW.W)); io.sdram.addr := addrQ
-  val dqmQ = RegInit(0.U(p.dqmW.W)); io.sdram.dqm := dqmQ
-  val ckeQ = RegInit(false.B); io.sdram.cke := ckeQ
   val bankQ = RegInit(0.U(p.bankW.W)); io.sdram.ba := bankQ
-  val dataOutQ = RegInit(0.U(p.dataW.W))
+  val dataOutQ = RegInit(0.U(p.dataW.W));
+  val ckeQ = RegInit(false.B); io.sdram.cke := ckeQ
   // --- tri-state ---
   val sdram_dq = IO(Analog(p.dataW.W))
   val dataInW = TriStateInBuf(sdram_dq, dataOutQ, RegNext( stateQ === State.write0 || stateQ === State.write1 ))
@@ -121,33 +121,28 @@ class SdramCore(val p: SdramParams = SdramParams()) extends Module {
   // --- State Machine ---
   switch(stateQ) {
     is(State.init) {
+      commandW := CMD_NOP // default
+
       val initTimerQ = RegInit((p.startDelay + 100).U(REFRESH_CNT_W.W)) // init timer
       initTimerQ := initTimerQ - 1.U
 
       when(initTimerQ === 50.U) {
         ckeQ := true.B
       }.elsewhen(initTimerQ === 40.U) {
-        commandQ := CMD_PRECHARGE
+        commandW := CMD_PRECHARGE
         addrQ := withBit(0.U(p.rowW.W), ALL_BANKS, true.B)
       }.elsewhen(initTimerQ === 20.U || initTimerQ === 30.U) {
-        commandQ := CMD_REFRESH
+        commandW := CMD_REFRESH
       }.elsewhen(initTimerQ === 10.U) {
-        commandQ := CMD_LOAD_MODE
+        commandW := CMD_LOAD_MODE
         addrQ := MODE_REG
       }.elsewhen(initTimerQ === 0.U) {
+        commandW := CMD_NOP
         stateQ := State.idle
-      }.otherwise {
-        commandQ := CMD_NOP
-        addrQ := 0.U
-        bankQ := 0.U
       }
     }
 
     is(State.idle) {
-      commandQ := CMD_NOP
-      addrQ := 0.U
-      bankQ := 0.U
-
       when(refreshQ) { // refresh come first
         when(rowOpenQ.orR) { stateQ := State.precharge }
           .otherwise        { stateQ := State.refresh }
@@ -168,9 +163,10 @@ class SdramCore(val p: SdramParams = SdramParams()) extends Module {
     is(State.activate) {
       gotoDelay(targetStateQ, p.trcdCycles) // read/write
 
-      commandQ := CMD_ACTIVE
+      commandW := CMD_ACTIVE
       addrQ := addrRowW
       bankQ := addrBankW
+
       activeRowQ(addrBankW) := addrRowW
       rowOpenQ := rowOpenQ | (1.U << addrBankW)
     }
@@ -178,16 +174,14 @@ class SdramCore(val p: SdramParams = SdramParams()) extends Module {
     is(State.read) {
       stateQ := State.read_wait
 
-      commandQ := CMD_READ
+      commandW := CMD_READ
       addrQ := withBit(addrColW, AUTO_PRECHARGE, false.B)
       bankQ := addrBankW
-      dqmQ := 0.U
+      dqmW := 0.U
     }
 
     is(State.read_wait) {
-      commandQ := CMD_NOP
-      addrQ := 0.U
-      bankQ := 0.U
+      commandW := CMD_NOP
 
       gotoDelay(State.idle, p.casLatency) // default
       when(!refreshQ && ramReqW && ramRdW) { // burst from axi4
@@ -200,11 +194,11 @@ class SdramCore(val p: SdramParams = SdramParams()) extends Module {
     is(State.write0) {
       stateQ := State.write1
 
-      commandQ := CMD_WRITE
+      commandW := CMD_WRITE
       addrQ := withBit(addrColW, AUTO_PRECHARGE, false.B)
       bankQ := addrBankW
       dataOutQ := ramWriteDataW(15, 0)
-      dqmQ := ~ramWrW(1, 0)
+      dqmW := ~ramWrW(1, 0)
     }
 
     is(State.write1) {
@@ -215,21 +209,20 @@ class SdramCore(val p: SdramParams = SdramParams()) extends Module {
         }
       }
 
-      commandQ := CMD_NOP
       dataOutQ := RegNext(ramWriteDataW(31, 16))
+      // bankQ := bankQ
       addrQ := withBit(addrQ, AUTO_PRECHARGE, false.B)
-      dqmQ := RegNext(~ramWrW(3, 2))
+      dqmW := RegNext(~ramWrW(3, 2))
     }
 
     is(State.precharge) {
+      commandW := CMD_PRECHARGE
       when(targetStateQ === State.refresh) {
         gotoDelay(State.refresh, p.trpCycles)
-        commandQ := CMD_PRECHARGE
         addrQ := withBit(0.U(p.rowW.W), ALL_BANKS, true.B)
         rowOpenQ := 0.U
       }.otherwise {
         gotoDelay(State.activate, p.trpCycles)
-        commandQ := CMD_PRECHARGE
         addrQ := withBit(0.U(p.rowW.W), ALL_BANKS, false.B)
         bankQ := addrBankW
         rowOpenQ := rowOpenQ & ~(1.U << addrBankW)
@@ -239,16 +232,10 @@ class SdramCore(val p: SdramParams = SdramParams()) extends Module {
     is(State.refresh) {
       gotoDelay(State.idle, p.trfcCycles)
 
-      commandQ := CMD_REFRESH
-      addrQ := 0.U
-      bankQ := 0.U
+      commandW := CMD_REFRESH
     }
 
     is(State.delay) {
-      commandQ := CMD_NOP
-      addrQ := 0.U
-      bankQ := 0.U
-
       delayQ := delayQ - 1.U
       when(delayQ === 1.U) { stateQ := delayStateQ }
     }
