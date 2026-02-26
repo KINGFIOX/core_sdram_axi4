@@ -31,7 +31,7 @@ case class SdramParams(
   val trfcCycles = (tRFC_ns + (cycleTimeNs - 1)) / cycleTimeNs
 }
 
-class SDRAMIO(val p: SdramParams = SdramParams()) extends Bundle {
+class SDRAMIO(val p: SdramParams = SdramParams(), val numSdram: Int = 1) extends Bundle {
   val clk = Output(Bool())
   val cke = Output(Bool())
   val cs = Output(Bool())
@@ -40,19 +40,20 @@ class SDRAMIO(val p: SdramParams = SdramParams()) extends Bundle {
   val we = Output(Bool())
   val addr = Output(UInt(p.rowW.W))
   val ba = Output(UInt(p.bankW.W))
-  val dqm = Output(UInt(p.dqmW.W))
+  val dqm = Output(Vec(numSdram, UInt(p.dqmW.W)))
 }
 
 class SdramAxiTop(
   sdramParams: SdramParams = SdramParams(),
-  axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBits = 32, dataBits = 32, idBits = 4)
+  axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBits = 32, dataBits = 32, idBits = 4),
+  numSdram: Int = 1
 ) extends Module {
   val io = IO(new Bundle {
     val axi = Flipped(new AXI4Bundle(axiParams))
-    val sdram = new SDRAMIO(sdramParams)
+    val sdram = new SDRAMIO(sdramParams, numSdram)
   })
   val pmem = Module(new SdramAxiPmem(axiParams))
-  val core = Module(new SdramCore(sdramParams))
+  val core = Module(new SdramCore(sdramParams, numSdram))
 
   pmem.io.axi <> io.axi
 
@@ -67,8 +68,10 @@ class SdramAxiTop(
   pmem.io.ram.readData := core.io.inportReadData
 
   io.sdram <> core.io.sdram
-  val sdram_dq = IO(Analog(sdramParams.dataW.W))
-  attach(sdram_dq, core.sdram_dq)
+  val sdram_dq = IO(Vec(numSdram, Analog(sdramParams.dataW.W)))
+  for (i <- 0 until numSdram) {
+    sdram_dq(i) <> core.sdram_dq(i)
+  }
 }
 
 class AXI4SDRAM(address: Seq[AddressSet], sdramParams: SdramParams = SdramParams())(implicit p: Parameters) extends LazyModule {
@@ -97,6 +100,6 @@ class AXI4SDRAM(address: Seq[AddressSet], sdramParams: SdramParams = SdramParams
     val ctrl = Module(new SdramAxiTop(sdramParams, edge.bundle))
     ctrl.io.axi <> in
     sdram_bundle <> ctrl.io.sdram
-    attach(sdram_dq, ctrl.sdram_dq)
+    attach(sdram_dq, ctrl.sdram_dq(0))
   }
 }

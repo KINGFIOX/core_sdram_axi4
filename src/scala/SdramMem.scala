@@ -14,9 +14,11 @@ class sdram_cmd_io extends Bundle {
   val rdata = Output(UInt(16.W))
 }
 
-class sdram_cmd extends FixedIOExtModule(new sdram_cmd_io) { }
+class sdram_cmd(implicit val idx: Int) extends FixedIOExtModule(new sdram_cmd_io, params = Map("idx" -> idx)) { }
 
-class SdramMem(val p: SdramParams = SdramParams()) extends RawModule {
+class SdramMem(val idx: Int) extends RawModule {
+  implicit val idx_implicit:Int = this.idx
+  val p = SdramParams(dataW = 16) // sdram 颗粒, 固定 dataW = 16
   val io = IO(Flipped(new SDRAMIO(p)))
   val sdram_dq = IO(Analog(p.dataW.W))
   val clock = ( ~ io.clk.asBool ).asClock
@@ -28,11 +30,11 @@ class SdramMem(val p: SdramParams = SdramParams()) extends RawModule {
   module.io.we_n  := io.we
   module.io.addr  := io.addr
   module.io.ba    := io.ba
-  module.io.dqm_n := io.dqm
+  module.io.dqm_n := io.dqm(0)
   module.io.data_input := TriStateInBuf( sdram_dq, module.io.data_output, module.io.data_out_en )
 }
 
-class SdramMemImpl extends Module with RequireAsyncReset {
+class SdramMemImpl(implicit val idx: Int) extends Module with RequireAsyncReset {
   private val WIDTH_BANK  = 2
   private val WIDTH_COLS  = 9
   private val WIDTH_ROWS  = 13

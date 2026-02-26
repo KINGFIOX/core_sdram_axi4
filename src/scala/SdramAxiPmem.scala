@@ -89,8 +89,7 @@ class SdramAxiPmem(axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBi
   io.axi.w.ready := writeActiveW && io.ram.accept && reqFifoAcceptW
   io.axi.ar.ready := readActiveW && !reqRdQ && io.ram.accept && reqFifoAcceptW
 
-  val addrW = Mux(reqWrQ || reqRdQ, reqAddrQ,
-    Mux(writeActiveW, io.axi.aw.bits.addr, io.axi.ar.bits.addr))
+  val addrW = Mux(reqWrQ || reqRdQ, reqAddrQ, Mux(writeActiveW, io.axi.aw.bits.addr, io.axi.ar.bits.addr))
 
   val wrW = writeActiveW && io.axi.w.valid
   val rdW = readActiveW
