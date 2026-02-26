@@ -11,15 +11,16 @@ import os.read
 
 class SdramApbTop(
   sdramParams: SdramParams = SdramParams(),
-  apbParams: APBBundleParameters = APBBundleParameters(addrBits = 32, dataBits = 32)
+  apbParams: APBBundleParameters = APBBundleParameters(addrBits = 32, dataBits = 32),
+  numSdram: Int = 1
 ) extends Module {
   val io = IO(new Bundle {
     val apb   = Flipped(new APBBundle(apbParams))
-    val sdram = new SDRAMIO(sdramParams)
+    val sdram = new SDRAMIO(sdramParams, numSdram)
   })
 
   // --- modules ----
-  private val core = Module(new SdramCore(sdramParams))
+  private val core = Module(new SdramCore(sdramParams, numSdram))
   core.io.inportLen := 0.U // always: burst len = 0
   core.io.inportWr := 0.U // default
   core.io.inportRd := false.B
@@ -79,8 +80,10 @@ class SdramApbTop(
 
   // SDRAM outputs
   io.sdram <> core.io.sdram
-  val sdram_dq = IO(Analog(sdramParams.dataW.W))
-  attach(sdram_dq, core.sdram_dq)
+  val sdram_dq = IO(Vec(numSdram, Analog(sdramParams.dataW.W)))
+  for (i <- 0 until numSdram) {
+    sdram_dq(i) <> core.sdram_dq(i)
+  }
 }
 
 class APBSDRAM(address: Seq[AddressSet], sdramParams: SdramParams = SdramParams())(implicit p: Parameters) extends LazyModule {
@@ -108,6 +111,6 @@ class APBSDRAM(address: Seq[AddressSet], sdramParams: SdramParams = SdramParams(
     val ctrl = Module(new SdramApbTop(sdramParams, edge.bundle))
     ctrl.io.apb <> in
     sdram_bundle <> ctrl.io.sdram
-    attach(sdram_dq, ctrl.sdram_dq)
+    attach(sdram_dq, ctrl.sdram_dq(0))
   }
 }
