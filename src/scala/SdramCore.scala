@@ -91,6 +91,7 @@ class SdramCore(val p: SdramParams = SdramParams()) extends Module {
   // --- row open ---
   val rowOpenQ = RegInit(0.U(p.banks.W))
   val activeRowQ = RegInit(VecInit(Seq.fill(p.banks)(0.U(p.rowW.W))))
+  val rowHitW = rowOpenQ(addrBankW) && addrRowW === activeRowQ(addrBankW)
 
   // --- Periodic refresh (after init) ---
   val (_, refreshTick) = Counter(stateQ =/= State.init, p.refreshCycles + 1)
@@ -185,7 +186,7 @@ class SdramCore(val p: SdramParams = SdramParams()) extends Module {
 
       gotoDelay(State.idle, p.casLatency) // default
       when(!refreshQ && ramReqW && ramRdW) { // burst from axi4
-        when(rowOpenQ(addrBankW) && addrRowW === activeRowQ(addrBankW)) {
+        when(rowHitW) {
           stateQ := State.read // renew state instead of delay
         }
       }
@@ -204,7 +205,7 @@ class SdramCore(val p: SdramParams = SdramParams()) extends Module {
     is(State.write1) {
       stateQ := State.idle
       when(!refreshQ && ramReqW && (ramWrW =/= 0.U)) {
-        when(rowOpenQ(addrBankW) && addrRowW === activeRowQ(addrBankW)) {
+        when(rowHitW) {
           stateQ := State.write0
         }
       }
