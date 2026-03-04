@@ -71,12 +71,12 @@ class SdramAxiPmem(axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBi
   val ramWrO = Wire(UInt(4.W))
   val ramRdO = Wire(Bool())
 
-  // --- Request tracking FIFO ---
-  val reqFifo = Module(new SdramAxiPmemFifo(width = 6))
-  val reqFifoAcceptW = reqFifo.io.accept
+  // --- Request tracking Queue (depth 4) ---
+  val reqQueue = Module(new Queue(UInt(6.W), 4))
+  val reqFifoAcceptW = reqQueue.io.enq.ready
 
-  // --- Response buffering FIFO ---
-  val respFifo = Module(new SdramAxiPmemFifo(width = 32))
+  // --- Response buffering Queue (depth 4) ---
+  val respQueue = Module(new Queue(UInt(32.W), 4))
 
   // --- Priority arbitration ---
   val writePrioW = (reqPrioQ && !reqHoldRdQ) || reqHoldWrQ
@@ -168,27 +168,27 @@ class SdramAxiPmem(axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBi
   }
 
   // --- Response accept ---
-  val reqOutW = reqFifo.io.dataOut
-  val reqOutValidW = reqFifo.io.valid
+  val reqOutW = reqQueue.io.deq.bits
+  val reqOutValidW = reqQueue.io.deq.valid
 
   val respIsWriteW = reqOutValidW && !reqOutW(5)
   val respIsReadW = reqOutValidW && reqOutW(5)
   val respIsLastW = reqOutW(4)
   val respIdW = reqOutW(3, 0)
 
-  val respValidW = respFifo.io.valid
+  val respValidW = respQueue.io.deq.valid
 
   val respAcceptW = io.axi.r.fire || io.axi.b.fire || (respValidW && respIsWriteW && !respIsLastW)
 
-  // --- Wire up request FIFO ---
-  reqFifo.io.dataIn := reqInR
-  reqFifo.io.push := reqPushW
-  reqFifo.io.pop := respAcceptW
+  // --- Wire up request Queue ---
+  reqQueue.io.enq.valid := reqPushW
+  reqQueue.io.enq.bits := reqInR
+  reqQueue.io.deq.ready := respAcceptW
 
-  // --- Wire up response FIFO ---
-  respFifo.io.dataIn := io.ram.readData
-  respFifo.io.push := io.ram.ack
-  respFifo.io.pop := respAcceptW
+  // --- Wire up response Queue ---
+  respQueue.io.enq.valid := io.ram.ack
+  respQueue.io.enq.bits := io.ram.readData
+  respQueue.io.deq.ready := respAcceptW
 
   // --- Response outputs ---
   io.axi.b.valid := respValidW & respIsWriteW & respIsLastW
@@ -196,7 +196,7 @@ class SdramAxiPmem(axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBi
   io.axi.b.bits.id := respIdW
 
   io.axi.r.valid := respValidW & respIsReadW
-  io.axi.r.bits.data := respFifo.io.dataOut
+  io.axi.r.bits.data := respQueue.io.deq.bits
   io.axi.r.bits.resp := 0.U
   io.axi.r.bits.id := respIdW
   io.axi.r.bits.last := respIsLastW

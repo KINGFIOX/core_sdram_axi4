@@ -1,128 +1,89 @@
 {
-  description = "SDRAM AXI4 Controller - Chisel/SystemC Simulation";
+  description = "core_sdram_axi4 开发环境（Mill 0.12、Chisel、Verilator、SystemC）";
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-parts = {
-      url = "github:hercules-ci/flake-parts";
-      inputs.nixpkgs-lib.follows = "nixpkgs";
-    };
-    treefmt-nix = {
-      url = "github:numtide/treefmt-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    mill-ivy-fetcher.url = "github:Avimitin/mill-ivy-fetcher";
-  };
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
 
-  outputs =
-    inputs@{
-      self,
-      nixpkgs,
-      flake-parts,
-      ...
-    }:
+  outputs = { self, nixpkgs }:
     let
-      overlay = import ./nix/overlay.nix;
+      supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
+      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+      pkgsFor = system: import nixpkgs {
+        inherit system;
+        config = { };
+        overlays = [ (final: prev: {
+          # Nixpkgs 中 mill 默认为 1.x，本项目需要 0.12
+          # Nixpkgs 默认 Mill 为 1.x；0.12.14 起 GitHub 不再提供 assembly，故使用 0.12.0
+          mill = final.stdenv.mkDerivation rec {
+            pname = "mill";
+            version = "0.12.0";
+            assemblyName = "0.12.0-11-7e7a54-assembly";
+            src = final.fetchurl {
+              url = "https://github.com/com-lihaoyi/mill/releases/download/${version}/${assemblyName}";
+              hash = "sha256-k/qYHEaSLYKMWKXOtv6PjiFt1a9oqL7ZlIkdUk139e8=";
+            };
+            nativeBuildInputs = [ final.makeWrapper ];
+            dontUnpack = true;
+            dontConfigure = true;
+            dontBuild = true;
+            preferLocalBuild = true;
+            installPhase = ''
+              runHook preInstall
+              install -Dm555 "$src" "$out/bin/.mill-wrapped"
+              makeWrapper "$out/bin/.mill-wrapped" "$out/bin/mill" \
+                --prefix PATH : "${final.jdk17}/bin" \
+                --set JAVA_HOME "${final.jdk17}"
+              runHook postInstall
+            '';
+            doInstallCheck = true;
+            installCheckPhase = ''
+              $out/bin/mill --help > /dev/null
+            '';
+            meta = with final.lib; {
+              homepage = "https://com-lihaoyi.github.io/mill/";
+              license = licenses.mit;
+              description = "Mill build tool (0.12.x for Scala/Chisel)";
+              mainProgram = "mill";
+              platforms = final.lib.platforms.all;
+            };
+          };
+        }) ];
+      };
     in
-    flake-parts.lib.mkFlake { inherit inputs; } {
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux"
-        "aarch64-darwin"
-      ];
-
-      imports = [
-        inputs.treefmt-nix.flakeModule
-      ];
-
-      flake.overlays.default = overlay;
-
-      perSystem =
-        { system, pkgs, ... }:
+    {
+      devShells = forAllSystems (system:
+        let
+          pkgs = pkgsFor system;
+          verilator = pkgs.verilator;
+          systemc = pkgs.systemc;
+        in
         {
-          _module.args.pkgs = import nixpkgs {
-            inherit system;
-            overlays = with inputs; [
-              mill-ivy-fetcher.overlays.default
-              overlay
+          default = pkgs.mkShell {
+            name = "core-sdram-axi4";
+            nativeBuildInputs = with pkgs; [
+              mill
+              jdk17
+              verilator
+              systemc
+              ccache
+              gcc
+              gdb
+              gtkwave
+              git
             ];
+            shellHook = ''
+              export VERILATOR_SRC="${verilator}/share/verilator/include"
+              export SYSTEMC_HOME="${systemc}"
+              export SYSTEMC_LIBDIR="${systemc}/lib"
+              export MILL_WORKSPACE_ROOT="$(pwd)"
+              echo "开发环境已加载: Mill 0.12, JDK 17, Verilator, SystemC, ccache, gtkwave, gdb"
+            '';
           };
+        });
 
-          legacyPackages = pkgs;
-
-          treefmt = {
-            projectRootFile = "flake.nix";
-            programs.scalafmt = {
-              enable = true;
-              includes = [ "*.mill" ];
-            };
-            programs.nixfmt = {
-              enable = true;
-              excludes = [ "*/generated.nix" ];
-            };
-          };
-
-          devShells.default =
-            with pkgs;
-            mkShell (
-              {
-                inputsFrom = [ sdram.sdram-compiled ];
-                packages = [
-                  nixd
-                  nvfetcher
-                  metals
-
-                  systemc
-                  verilator
-                  gnumake
-                  gcc
-                  ccache
-                  gtkwave
-                  clang-tools
-                  bear
-                  gdb
-                  python3
-                  python3Packages.pygments
-                  curl
-                ];
-
-                CC = "ccache gcc";
-                CXX = "ccache g++";
-                VERILATOR_SRC = "${verilator}/share/verilator/include";
-                SYSTEMC_HOME = "${systemc}";
-                SYSTEMC_LIBDIR = "${systemc}/lib";
-              }
-              // sdram.sdram-compiled.env
-              // {
-                shellHook = ''
-                  if [[ ! -f "build.mill" && ! -f "build.sc" ]]; then
-                    echo "No build.mill or build.sc file found, exit" >&2
-                    return 1
-                  fi
-                  mkdir -p out
-                  NIX_BUILD_TOP="$(realpath out)"
-                  runHook preUnpack
-                  runHook postUnpack
-
-                  export LD_LIBRARY_PATH="$PWD/build/lib:${systemc}/lib:''${LD_LIBRARY_PATH:-}"
-
-                  GDB_DASHBOARD="$PWD/.gdb-dashboard"
-                  if [ ! -f "$GDB_DASHBOARD" ]; then
-                    echo "Downloading gdb-dashboard..."
-                    curl -sL https://raw.githubusercontent.com/cyrus-and/gdb-dashboard/master/.gdbinit -o "$GDB_DASHBOARD"
-                  fi
-
-                  echo "=== SDRAM AXI4 仿真环境已就绪 ==="
-                  echo "  Mill version: $(mill --version 2>&1 | head -1)"
-                  echo "  make elaborate   — Chisel 生成 SystemVerilog"
-                  echo "  make run BUS=apb — 编译并运行 APB 仿真"
-                  echo "  make run BUS=axi — 编译并运行 AXI4 仿真"
-                  echo "  make run         — 默认编译运行 APB 仿真"
-                  echo "  make gdb         — 用 GDB + Dashboard 调试"
-                  echo "  make view        — 用 GTKWave 查看波形"
-                '';
-              }
-            );
-        };
+      packages = forAllSystems (system:
+        let pkgs = pkgsFor system;
+        in {
+          mill = pkgs.mill;
+        });
     };
 }
