@@ -16,188 +16,198 @@ class RamIO extends Bundle {
   val readData = Input(UInt(32.W))
 }
 
-class SdramAxiPmem(axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBits = 32, dataBits = 32, idBits = 4)) extends Module {
+class SdramAxiPmem(
+    axiParams: AXI4BundleParameters =
+      AXI4BundleParameters(addrBits = 32, dataBits = 32, idBits = 4)
+) extends Module {
   val io = IO(new Bundle {
     val axi = Flipped(new AXI4Bundle(axiParams))
     val ram = new RamIO
   })
 
+  val QUEUE_DEPTH = 4
+
   def calculateAddrNext(addr: UInt, axtype: UInt, axlen: UInt): UInt = {
     val result = WireDefault(addr + 4.U)
     val mask = WireDefault(0.U(32.W))
-
     switch(axtype) {
-      is(0.U) {
-        result := addr
-      }
+      is(0.U) { result := addr }
       is(2.U) {
         switch(axlen) {
-          is(0.U) {
-            mask := "h03".U
-          }
-          is(1.U) {
-            mask := "h07".U
-          }
-          is(3.U) {
-            mask := "h0F".U
-          }
-          is(7.U) {
-            mask := "h1F".U
-          }
-          is(15.U) {
-            mask := "h3F".U
-          }
+          is(0.U) { mask := "h03".U }
+          is(1.U) { mask := "h07".U }
+          is(3.U) { mask := "h0F".U }
+          is(7.U) { mask := "h1F".U }
+          is(15.U) { mask := "h3F".U }
         }
-        when(axtype === 2.U) {
-          result := (addr & ~mask) | ((addr + 4.U) & mask)
-        }
+        result := (addr & ~mask) | ((addr + 4.U) & mask)
       }
     }
     result
   }
 
-  // --- Registers ---
-  val reqLenQ = RegInit(0.U(8.W))
-  val reqAddrQ = RegInit(0.U(32.W))
-  val reqRdQ = RegInit(false.B)
-  val reqWrQ = RegInit(false.B)
-  val reqIdQ = RegInit(0.U(4.W))
-  val reqAxburstQ = RegInit(0.U(2.W))
-  val reqAxlenQ = RegInit(0.U(8.W))
-  val reqPrioQ = RegInit(false.B)
-  val reqHoldRdQ = RegInit(false.B)
-  val reqHoldWrQ = RegInit(false.B)
-
-  val ramWrO = Wire(UInt(4.W))
-  val ramRdO = Wire(Bool())
-
-  // --- Request tracking Queue (depth 4) ---
-  val reqQueue = Module(new Queue(UInt(6.W), 4))
-  val reqFifoAcceptW = reqQueue.io.enq.ready
-
-  // --- Response buffering Queue (depth 4) ---
-  val respQueue = Module(new Queue(UInt(32.W), 4))
-
-  // --- Priority arbitration ---
-  val writePrioW = (reqPrioQ && !reqHoldRdQ) || reqHoldWrQ
-  val readPrioW = (!reqPrioQ && !reqHoldWrQ) || reqHoldRdQ
-
-  val writeActiveW = (io.axi.aw.valid || reqWrQ) && !reqRdQ && reqFifoAcceptW && (writePrioW || reqWrQ || !io.axi.ar.valid)
-  val readActiveW = (io.axi.ar.valid || reqRdQ) && !reqWrQ && reqFifoAcceptW && (readPrioW || reqRdQ || !io.axi.aw.valid)
-
-  io.axi.aw.ready := writeActiveW && !reqWrQ && io.ram.accept && reqFifoAcceptW
-  io.axi.w.ready := writeActiveW && io.ram.accept && reqFifoAcceptW
-  io.axi.ar.ready := readActiveW && !reqRdQ && io.ram.accept && reqFifoAcceptW
-
-  val addrW = Mux(reqWrQ || reqRdQ, reqAddrQ,
-    Mux(writeActiveW, io.axi.aw.bits.addr, io.axi.ar.bits.addr))
-
-  val wrW = writeActiveW && io.axi.w.valid
-  val rdW = readActiveW
-
-  ramWrO := Mux(wrW, io.axi.w.bits.strb, 0.U)
-  ramRdO := rdW
-
-  io.ram.addr := addrW
-  io.ram.writeData := io.axi.w.bits.data
-  io.ram.rd := ramRdO
-  io.ram.wr := ramWrO
-  io.ram.len := Mux(io.axi.aw.valid, io.axi.aw.bits.len,
-    Mux(io.axi.ar.valid, io.axi.ar.bits.len, 0.U))
-
-  // --- Sequential: burst tracking ---
-  when((ramWrO =/= 0.U || ramRdO) && io.ram.accept) {
-    when(reqLenQ === 0.U) {
-      reqRdQ := false.B
-      reqWrQ := false.B
-    }.otherwise {
-      reqAddrQ := calculateAddrNext(reqAddrQ, reqAxburstQ, reqAxlenQ)
-      reqLenQ := reqLenQ - 1.U
-    }
+  // ==================== Read FSM ====================
+  object RState extends ChiselEnum {
+    val rIdle, rBurst = Value
   }
 
-  when(io.axi.aw.fire) {
-    when(io.axi.w.fire) {
-      reqWrQ := !io.axi.w.bits.last
-      reqLenQ := io.axi.aw.bits.len - 1.U
-      reqIdQ := io.axi.aw.bits.id
-      reqAxburstQ := io.axi.aw.bits.burst
-      reqAxlenQ := io.axi.aw.bits.len
-      reqAddrQ := calculateAddrNext(io.axi.aw.bits.addr, io.axi.aw.bits.burst, io.axi.aw.bits.len)
-    }.otherwise {
-      reqWrQ := true.B
-      reqLenQ := io.axi.aw.bits.len
-      reqIdQ := io.axi.aw.bits.id
-      reqAxburstQ := io.axi.aw.bits.burst
-      reqAxlenQ := io.axi.aw.bits.len
-      reqAddrQ := io.axi.aw.bits.addr
-    }
-    reqPrioQ := !reqPrioQ
-  }.elsewhen(io.axi.ar.fire) {
-    reqRdQ := io.axi.ar.bits.len =/= 0.U
-    reqLenQ := io.axi.ar.bits.len - 1.U
-    reqAddrQ := calculateAddrNext(io.axi.ar.bits.addr, io.axi.ar.bits.burst, io.axi.ar.bits.len)
-    reqIdQ := io.axi.ar.bits.id
-    reqAxburstQ := io.axi.ar.bits.burst
-    reqAxlenQ := io.axi.ar.bits.len
-    reqPrioQ := !reqPrioQ
+  val rState = RegInit(RState.rIdle)
+  val rAddr = Reg(UInt(32.W))
+  val rId = Reg(UInt(axiParams.idBits.W))
+  val rBurstType = Reg(UInt(2.W))
+  val rBurstLen = Reg(UInt(8.W))
+  val rReqCnt = Reg(UInt(8.W))
+  val rRespCnt = Reg(UInt(8.W))
+  val rAllReqsSent = RegInit(true.B)
+
+  val rDataQ = Module(new Queue(UInt(axiParams.dataBits.W), QUEUE_DEPTH))
+
+  // ==================== Write FSM ====================
+  object WState extends ChiselEnum {
+    val wIdle, wBurst, wResp = Value
   }
 
-  // --- Hold logic ---
-  when(ramRdO && !io.ram.accept) {
-    reqHoldRdQ := true.B
-  }.elsewhen(io.ram.accept) {
-    reqHoldRdQ := false.B
-  }
+  val wState = RegInit(WState.wIdle)
+  val wAddr = Reg(UInt(32.W))
+  val wId = Reg(UInt(axiParams.idBits.W))
+  val wBurstType = Reg(UInt(2.W))
+  val wBurstLen = Reg(UInt(8.W))
+  val wReqCnt = Reg(UInt(8.W))
+  val wAllReqsSent = RegInit(true.B)
 
-  when(ramWrO.orR && !io.ram.accept) {
-    reqHoldWrQ := true.B
-  }.elsewhen(io.ram.accept) {
-    reqHoldWrQ := false.B
-  }
+  // ==================== Ack Pending & Flow Control ====================
+  val rAckPending = RegInit(0.U(4.W))
+  val wAckPending = RegInit(0.U(4.W))
+  val rOutstanding = RegInit(0.U(4.W))
 
-  // --- Request tracking ---
-  val reqPushW = (ramRdO || (ramWrO =/= 0.U)) && io.ram.accept
+  // ==================== Arbiter ====================
+  val rReqRam = rState === RState.rBurst && !rAllReqsSent && rOutstanding < QUEUE_DEPTH.U
+  val wReqRam = wState === WState.wBurst && !wAllReqsSent && io.axi.w.valid
 
-  val reqInR = WireDefault(Cat(ramRdO, reqLenQ === 0.U, reqIdQ))
+  val arbiter = Module(new RRArbiter(Bool(), 2))
+  arbiter.io.in(0).valid := rReqRam && wAckPending === 0.U
+  arbiter.io.in(0).bits := DontCare
+  arbiter.io.in(1).valid := wReqRam && rAckPending === 0.U
+  arbiter.io.in(1).bits := DontCare
+  arbiter.io.out.ready := io.ram.accept
 
-  when(io.axi.ar.fire) {
-    reqInR := Cat(1.U(1.W), io.axi.ar.bits.len === 0.U, io.axi.ar.bits.id)
-  }.elsewhen(io.axi.aw.fire) {
-    reqInR := Cat(0.U(1.W), io.axi.aw.bits.len === 0.U, io.axi.aw.bits.id)
-  }
+  val grantRead = arbiter.io.out.valid && arbiter.io.chosen === 0.U
+  val grantWrite = arbiter.io.out.valid && arbiter.io.chosen === 1.U
 
-  // --- Response accept ---
-  val reqOutW = reqQueue.io.deq.bits
-  val reqOutValidW = reqQueue.io.deq.valid
+  // ==================== Ack Routing ====================
+  val ackToRead = io.ram.ack && rAckPending > 0.U
+  val ackToWrite = io.ram.ack && wAckPending > 0.U
 
-  val respIsWriteW = reqOutValidW && !reqOutW(5)
-  val respIsReadW = reqOutValidW && reqOutW(5)
-  val respIsLastW = reqOutW(4)
-  val respIdW = reqOutW(3, 0)
+  rAckPending := rAckPending + (grantRead && io.ram.accept).asUInt - ackToRead.asUInt
+  wAckPending := wAckPending + (grantWrite && io.ram.accept).asUInt - ackToWrite.asUInt
+  rOutstanding := rOutstanding + (grantRead && io.ram.accept).asUInt - io.axi.r.fire.asUInt
 
-  val respValidW = respQueue.io.deq.valid
+  // ==================== RAM Interface Mux ====================
+  io.ram.addr := MuxCase(
+    0.U,
+    Seq(
+      grantRead -> rAddr,
+      grantWrite -> wAddr
+    )
+  )
+  io.ram.rd := grantRead
+  io.ram.wr := Mux(grantWrite, io.axi.w.bits.strb, 0.U)
+  io.ram.writeData := Mux(grantWrite, io.axi.w.bits.data, 0.U)
+  io.ram.len := MuxCase(
+    0.U,
+    Seq(
+      grantRead -> rBurstLen,
+      grantWrite -> wBurstLen
+    )
+  )
 
-  val respAcceptW = io.axi.r.fire || io.axi.b.fire || (respValidW && respIsWriteW && !respIsLastW)
+  // ==================== Read Data Queue ====================
+  rDataQ.io.enq.valid := ackToRead
+  rDataQ.io.enq.bits := io.ram.readData
+  rDataQ.io.deq.ready := io.axi.r.ready && rState === RState.rBurst
 
-  // --- Wire up request Queue ---
-  reqQueue.io.enq.valid := reqPushW
-  reqQueue.io.enq.bits := reqInR
-  reqQueue.io.deq.ready := respAcceptW
-
-  // --- Wire up response Queue ---
-  respQueue.io.enq.valid := io.ram.ack
-  respQueue.io.enq.bits := io.ram.readData
-  respQueue.io.deq.ready := respAcceptW
-
-  // --- Response outputs ---
-  io.axi.b.valid := respValidW & respIsWriteW & respIsLastW
-  io.axi.b.bits.resp := 0.U
-  io.axi.b.bits.id := respIdW
-
-  io.axi.r.valid := respValidW & respIsReadW
-  io.axi.r.bits.data := respQueue.io.deq.bits
+  // ==================== AXI Read Response ====================
+  io.axi.r.valid := rDataQ.io.deq.valid && rState === RState.rBurst
+  io.axi.r.bits.data := rDataQ.io.deq.bits
   io.axi.r.bits.resp := 0.U
-  io.axi.r.bits.id := respIdW
-  io.axi.r.bits.last := respIsLastW
+  io.axi.r.bits.id := rId // same id in one burst
+  io.axi.r.bits.last := rRespCnt === 0.U
+
+  // ==================== AXI Write/Other Defaults ====================
+  io.axi.ar.ready := rState === RState.rIdle
+  io.axi.aw.ready := wState === WState.wIdle
+  io.axi.w.ready := false.B
+  io.axi.b.valid := false.B
+  io.axi.b.bits.resp := 0.U
+  io.axi.b.bits.id := wId
+
+  // ==================== Read FSM Logic ====================
+  switch(rState) {
+    is(RState.rIdle) {
+      when(io.axi.ar.fire) {
+        rAddr := io.axi.ar.bits.addr // latch
+        rId := io.axi.ar.bits.id
+        rBurstType := io.axi.ar.bits.burst
+        rBurstLen := io.axi.ar.bits.len
+        rReqCnt := io.axi.ar.bits.len // counter
+        rRespCnt := io.axi.ar.bits.len
+        rAllReqsSent := false.B
+        rState := RState.rBurst
+      }
+    }
+    is(RState.rBurst) {
+      when(grantRead && io.ram.accept) { // pop from queue
+        when(rReqCnt === 0.U) {
+          rAllReqsSent := true.B
+        }.otherwise {
+          rReqCnt := rReqCnt - 1.U
+          rAddr := calculateAddrNext(rAddr, rBurstType, rBurstLen)
+        }
+      }
+
+      when(io.axi.r.fire) {
+        when(rRespCnt === 0.U) {
+          rState := RState.rIdle
+        }.otherwise {
+          rRespCnt := rRespCnt - 1.U
+        }
+      }
+    }
+  }
+
+  // ==================== Write FSM Logic ====================
+  switch(wState) {
+    is(WState.wIdle) {
+      when(io.axi.aw.fire) {
+        wAddr := io.axi.aw.bits.addr
+        wId := io.axi.aw.bits.id
+        wBurstType := io.axi.aw.bits.burst
+        wBurstLen := io.axi.aw.bits.len
+        wReqCnt := io.axi.aw.bits.len
+        wAllReqsSent := false.B
+        wState := WState.wBurst
+      }
+    }
+    is(WState.wBurst) {
+      io.axi.w.ready := grantWrite && io.ram.accept
+      when(io.axi.w.fire) {
+        when(wReqCnt === 0.U) {
+          wAllReqsSent := true.B
+        }.otherwise {
+          wReqCnt := wReqCnt - 1.U
+          wAddr := calculateAddrNext(wAddr, wBurstType, wBurstLen)
+        }
+      }
+
+      when(wAllReqsSent && wAckPending === 0.U) {
+        wState := WState.wResp
+      }
+    }
+    is(WState.wResp) {
+      io.axi.b.valid := true.B
+      when(io.axi.b.fire) {
+        wState := WState.wIdle
+      }
+    }
+  }
 }
