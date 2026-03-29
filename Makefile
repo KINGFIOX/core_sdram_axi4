@@ -20,20 +20,9 @@ export SYSTEMC_LIBDIR
 GDB_DASHBOARD  ?= .gdb-dashboard
 GDB_ARGS       ?= --iterations 10 --trace 0
 
-###############################################################################
-## Bus selection: make run BUS=apb  /  make run BUS=axi
-###############################################################################
-BUS ?= axi
-
-ifeq ($(BUS),apb)
-  TOP            = SDRAMApbSimTop
-  SRC_EXCLUDE    = src/cxx/sdram_axi.cpp src/cxx/tb_axi4_driver.cpp
-  BUS_CFLAGS     = -DBUS_APB
-else
-  TOP            = SDRAMAxiSimTop
-  SRC_EXCLUDE    = src/cxx/sdram_apb.cpp src/cxx/tb_apb_driver.cpp
-  BUS_CFLAGS     = -DBUS_AXI
-endif
+TOP            = SDRAMAxiSimTop
+SRC_EXCLUDE    = src/cxx/sdram_apb.cpp src/cxx/tb_apb_driver.cpp
+BUS_CFLAGS     = -DBUS_AXI
 
 export TOP
 export SRC_EXCLUDE

@@ -1,6 +1,7 @@
 ###############################################################################
 # Variables
 ###############################################################################
+CC             ?= ccache gcc
 CXX            ?= ccache g++
 VERILATOR_SRC  ?= /usr/share/verilator/include
 SYSTEMC_HOME   ?= /usr/local/systemc-2.3.1
@@ -35,8 +36,13 @@ SRC_LIST     += $(VERILATOR_SRC)/verilated.cpp
 SRC_LIST     += $(VERILATOR_SRC)/verilated_vcd_c.cpp
 SRC_LIST     += $(VERILATOR_SRC)/verilated_vcd_sc.cpp
 SRC_LIST     += $(VERILATOR_SRC)/verilated_threads.cpp
+# Host code required by Verilated SystemC model (DPI + $time / trace)
+VERILATED_HOST_CXX ?= src/cxx/verilator_sc_stubs.cpp
+VERILATED_HOST_C   ?= src/cxx/sdram_cmd.c
+SRC_LIST     += $(VERILATED_HOST_CXX)
 
-OBJ          ?= $(foreach src,$(SRC_LIST),$(call src2obj,$(src)))
+OBJ          ?= $(foreach src,$(SRC_LIST),$(call src2obj,$(src))) \
+                $(foreach src,$(VERILATED_HOST_C),$(call src2obj,$(src)))
 
 ###############################################################################
 # Rules
@@ -52,6 +58,13 @@ $(OBJ_DIR) $(LIB_DIR):
 	mkdir -p $@
 
 $(foreach src,$(SRC_LIST),$(eval $(call template_c,$(src))))
+
+define template_host_c
+$(call src2obj,$(1)): $(1) | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -c $$< -o $$@
+endef
+
+$(foreach src,$(VERILATED_HOST_C),$(eval $(call template_host_c,$(src))))
 
 $(LIB_DIR)$(LIBNAME): $(OBJ) | $(LIB_DIR) 
 	$(CXX) -shared -o $(LIB_DIR)$(LIBNAME) $(LIB_OPT) $(OBJ)

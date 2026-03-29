@@ -56,7 +56,7 @@ class SdramAxiTop(
 
   pmem.io.axi <> io.axi
 
-  core.io.inportWr := pmem.io.ram.wr
+  core.io.inportWr := pmem.io.ram.wstrb
   core.io.inportRd := pmem.io.ram.rd
   core.io.inportLen := pmem.io.ram.len
   core.io.inportAddr := pmem.io.ram.addr
@@ -72,6 +72,7 @@ class SdramAxiTop(
 }
 
 class AXI4SDRAM(address: Seq[AddressSet], sdramParams: SdramParams = SdramParams())(implicit p: Parameters) extends LazyModule {
+  val beatBytes = 4
   val node = AXI4SlaveNode(
     Seq(
       AXI4SlavePortParameters(
@@ -79,11 +80,12 @@ class AXI4SDRAM(address: Seq[AddressSet], sdramParams: SdramParams = SdramParams
           AXI4SlaveParameters(
             address = address,
             executable = true,
-            supportsRead = TransferSizes(1, 256),
-            supportsWrite = TransferSizes(1, 256)
+            supportsRead = TransferSizes(1, beatBytes),
+            supportsWrite = TransferSizes(1, beatBytes),
+            interleavedId = Some(0)
           )
         ),
-        beatBytes = 4
+        beatBytes = beatBytes
       )
     )
   )

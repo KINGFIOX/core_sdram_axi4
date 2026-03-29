@@ -23,3 +23,4 @@ out/
 # clangd
 compile_commands.json
 .cache
+.bloop

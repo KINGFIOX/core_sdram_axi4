@@ -4,14 +4,14 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.Analog
 
-class TriStateInBuf(bits: Int) extends BlackBox(Map("width" -> bits)) with HasBlackBoxInline {
-  val io = IO(new Bundle {
-    val dio = Analog(bits.W)
-    val dout = Input(UInt(bits.W))
-    val out_en = Input(Bool())
-    val din = Output(UInt(bits.W))
-  })
+class TriStateInBufIO(bits: Int) extends Bundle {
+  val dio = Analog(bits.W)
+  val dout = Input(UInt(bits.W))
+  val out_en = Input(Bool())
+  val din = Output(UInt(bits.W))
+}
 
+class TriStateInBuf(bits: Int) extends FixedIOExtModule(new TriStateInBufIO(bits), Map("width" -> bits))  {
   setInline("TriStateInBuf.sv",
     """module TriStateInBuf #(
       |  parameter width = 1

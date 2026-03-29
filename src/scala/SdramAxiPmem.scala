@@ -5,7 +5,7 @@ import chisel3.util._
 import freechips.rocketchip.amba.axi4._
 
 class RamIO extends Bundle {
-  val wr = Output(UInt(4.W))
+  val wstrb = Output(UInt(4.W))
   val rd = Output(Bool())
   val len = Output(UInt(8.W))
   val addr = Output(UInt(32.W))
@@ -14,6 +14,11 @@ class RamIO extends Bundle {
   val ack = Input(Bool())
   val error = Input(Bool())
   val readData = Input(UInt(32.W))
+}
+
+class WDataEntry(dataBits: Int) extends Bundle {
+  val data = UInt(dataBits.W)
+  val strb = UInt((dataBits / 8).W)
 }
 
 class SdramAxiPmem(
@@ -75,6 +80,8 @@ class SdramAxiPmem(
   val wReqCnt = Reg(UInt(8.W))
   val wAllReqsSent = RegInit(true.B)
 
+  val wDataQueue = Module(new Queue(new WDataEntry(axiParams.dataBits), QUEUE_DEPTH))
+
   // ==================== Ack Pending & Flow Control ====================
   val rAckPending = RegInit(0.U(4.W))
   val wAckPending = RegInit(0.U(4.W))
@@ -82,7 +89,7 @@ class SdramAxiPmem(
 
   // ==================== Arbiter ====================
   val rReqRam = rState === RState.rBurst && !rAllReqsSent && rOutstanding < QUEUE_DEPTH.U
-  val wReqRam = wState === WState.wBurst && !wAllReqsSent && io.axi.w.valid
+  val wReqRam = wState === WState.wBurst && !wAllReqsSent && wDataQueue.io.deq.valid
 
   val arbiter = Module(new RRArbiter(Bool(), 2))
   arbiter.io.in(0).valid := rReqRam && wAckPending === 0.U
@@ -111,8 +118,8 @@ class SdramAxiPmem(
     )
   )
   io.ram.rd := grantRead
-  io.ram.wr := Mux(grantWrite, io.axi.w.bits.strb, 0.U)
-  io.ram.writeData := Mux(grantWrite, io.axi.w.bits.data, 0.U)
+  io.ram.wstrb := Mux(grantWrite, wDataQueue.io.deq.bits.strb, 0.U)
+  io.ram.writeData := wDataQueue.io.deq.bits.data
   io.ram.len := MuxCase(
     0.U,
     Seq(
@@ -125,6 +132,12 @@ class SdramAxiPmem(
   rDataQ.io.enq.valid := ackToRead
   rDataQ.io.enq.bits := io.ram.readData
   rDataQ.io.deq.ready := io.axi.r.ready && rState === RState.rBurst
+
+  // ==================== Write Data Queue ====================
+  wDataQueue.io.enq.valid := io.axi.w.valid && (wState === WState.wBurst)
+  wDataQueue.io.enq.bits.data := io.axi.w.bits.data
+  wDataQueue.io.enq.bits.strb := io.axi.w.bits.strb
+  wDataQueue.io.deq.ready := grantWrite && io.ram.accept
 
   // ==================== AXI Read Response ====================
   io.axi.r.valid := rDataQ.io.deq.valid && rState === RState.rBurst
@@ -189,8 +202,9 @@ class SdramAxiPmem(
       }
     }
     is(WState.wBurst) {
-      io.axi.w.ready := grantWrite && io.ram.accept
-      when(io.axi.w.fire) {
+      io.axi.w.ready := wDataQueue.io.enq.ready
+
+      when(wDataQueue.io.deq.fire) {
         when(wReqCnt === 0.U) {
           wAllReqsSent := true.B
         }.otherwise {
