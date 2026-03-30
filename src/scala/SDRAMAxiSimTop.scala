@@ -17,10 +17,13 @@ class SDRAMAxiSimTop extends FixedIORawModule(new SDRAMAxi4OnlyInterface)
 
   val sdramParams = SdramParams()
 
-  val ctrl = Module(new SdramAxiTop(sdramParams))
-  val mem  = Module(new SdramMem(sdramParams))
+  val ctrl = Module(new SdramInterleaveTop(sdramParams))
+  val mem0 = Module(new SdramMem(sdramParams))
+  val mem1 = Module(new SdramMem(sdramParams))
 
   ctrl.io.axi <> io.in
-  mem.io <> ctrl.io.sdram
-  attach(ctrl.sdram_dq, mem.sdram_dq)
+  mem0.io <> ctrl.io.sdram0
+  attach(ctrl.sdram_dq0, mem0.sdram_dq)
+  mem1.io <> ctrl.io.sdram1
+  attach(ctrl.sdram_dq1, mem1.sdram_dq)
 }

@@ -43,8 +43,6 @@ SRC_CXX      ?= $(foreach src,$(SRC_DIR),$(wildcard $(src)/*.cpp))
 SRC_C        ?= $(foreach src,$(SRC_DIR),$(wildcard $(src)/*.c))
 SRC_CXX      := $(filter-out $(addprefix %/,$(notdir $(SRC_EXCLUDE))),$(SRC_CXX))
 SRC_C        := $(filter-out $(addprefix %/,$(notdir $(SRC_EXCLUDE))),$(SRC_C))
-# Linked into libsyscverilated; omit here to avoid duplicate symbols.
-SRC_C        := $(filter-out %/sdram_cmd.c,$(SRC_C))
 SRC_CXX      := $(filter-out %/verilator_sc_stubs.cpp,$(SRC_CXX))
 SRC          ?= $(SRC_CXX) $(SRC_C)
 OBJ          ?= $(foreach src,$(SRC),$(call src2obj,$(src)))

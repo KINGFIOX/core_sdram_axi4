@@ -71,6 +71,73 @@ class SdramAxiTop(
   attach(sdram_dq, core.sdram_dq)
 }
 
+class SdramInterleaveTop(
+  sdramParams: SdramParams = SdramParams(),
+  axiParams: AXI4BundleParameters = AXI4BundleParameters(addrBits = 32, dataBits = 32, idBits = 4)
+) extends Module {
+  val io = IO(new Bundle {
+    val axi = Flipped(new AXI4Bundle(axiParams))
+    val sdram0 = new SDRAMIO(sdramParams)
+    val sdram1 = new SDRAMIO(sdramParams)
+  })
+  val sdram_dq0 = IO(Analog(sdramParams.dataW.W))
+  val sdram_dq1 = IO(Analog(sdramParams.dataW.W))
+
+  val pmem = Module(new SdramAxiPmem(axiParams))
+  val core0 = Module(new SdramCore(sdramParams))
+  val core1 = Module(new SdramCore(sdramParams))
+
+  pmem.io.axi <> io.axi
+
+  // --- Interleave routing ---
+  // addr(2) indicate the word-address
+  val chipSel = pmem.io.ram.addr(2)
+  // sdram is byte-addressable
+  val coreAddr = Cat(
+    0.U((32 - sdramParams.addrW - 1).W),
+    pmem.io.ram.addr(sdramParams.addrW + 1, 3),
+    pmem.io.ram.addr(1, 0)
+  )
+
+  // Request routing: gate rd/wstrb so only the target core sees a request
+  core0.io.inportAddr := coreAddr
+  core0.io.inportRd := pmem.io.ram.rd && !chipSel
+  core0.io.inportWr := Mux(!chipSel, pmem.io.ram.wstrb, 0.U)
+  core0.io.inportWriteData := pmem.io.ram.writeData
+  core0.io.inportLen := pmem.io.ram.len
+
+  core1.io.inportAddr := coreAddr
+  core1.io.inportRd := pmem.io.ram.rd && chipSel
+  core1.io.inportWr := Mux(chipSel, pmem.io.ram.wstrb, 0.U)
+  core1.io.inportWriteData := pmem.io.ram.writeData
+  core1.io.inportLen := pmem.io.ram.len
+
+  // Accept from the targeted core
+  pmem.io.ram.accept := Mux(chipSel, core1.io.inportAccept, core0.io.inportAccept)
+
+  // Pending FIFO: track which core each accepted request went to
+  val pendingQ = Module(new Queue(Bool(), 4))
+  val reqActive = pmem.io.ram.rd || pmem.io.ram.wstrb =/= 0.U
+  pendingQ.io.enq.valid := pmem.io.ram.accept && reqActive
+  pendingQ.io.enq.bits := chipSel
+
+  val ackCore = pendingQ.io.deq.bits
+  val core0Ack = core0.io.inportAck
+  val core1Ack = core1.io.inportAck
+  val routedAck = Mux(ackCore, core1Ack, core0Ack)
+
+  pmem.io.ram.ack := routedAck && pendingQ.io.deq.valid
+  pmem.io.ram.readData := Mux(ackCore, core1.io.inportReadData, core0.io.inportReadData)
+  pmem.io.ram.error := Mux(ackCore, core1.io.inportError, core0.io.inportError)
+  pendingQ.io.deq.ready := routedAck && pendingQ.io.deq.valid
+
+  // SDRAM IO
+  io.sdram0 <> core0.io.sdram
+  io.sdram1 <> core1.io.sdram
+  attach(sdram_dq0, core0.sdram_dq)
+  attach(sdram_dq1, core1.sdram_dq)
+}
+
 class AXI4SDRAM(address: Seq[AddressSet], sdramParams: SdramParams = SdramParams())(implicit p: Parameters) extends LazyModule {
   val beatBytes = 4
   val node = AXI4SlaveNode(
@@ -94,11 +161,15 @@ class AXI4SDRAM(address: Seq[AddressSet], sdramParams: SdramParams = SdramParams
 
   class Impl extends LazyModuleImp(this) {
     val (in, edge) = node.in(0)
-    val sdram_bundle = IO(new SDRAMIO(sdramParams))
-    val sdram_dq = IO(Analog(sdramParams.dataW.W))
-    val ctrl = Module(new SdramAxiTop(sdramParams, edge.bundle))
+    val sdram_bundle0 = IO(new SDRAMIO(sdramParams))
+    val sdram_dq0 = IO(Analog(sdramParams.dataW.W))
+    val sdram_bundle1 = IO(new SDRAMIO(sdramParams))
+    val sdram_dq1 = IO(Analog(sdramParams.dataW.W))
+    val ctrl = Module(new SdramInterleaveTop(sdramParams, edge.bundle))
     ctrl.io.axi <> in
-    sdram_bundle <> ctrl.io.sdram
-    attach(sdram_dq, ctrl.sdram_dq)
+    sdram_bundle0 <> ctrl.io.sdram0
+    sdram_bundle1 <> ctrl.io.sdram1
+    attach(sdram_dq0, ctrl.sdram_dq0)
+    attach(sdram_dq1, ctrl.sdram_dq1)
   }
 }

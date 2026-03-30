@@ -61,7 +61,6 @@ class SdramCore(val p: SdramParams = SdramParams()) extends Module {
     //   0      1     2       3       4        5        6       7        8         9
     val init, delay, idle, activate, read, read_wait, write0, write1, precharge, refresh = Value
   }
-  State.all.foreach { s => println(s"State: ${s} = ${s.litValue}") } // print during elaboration
 
   // --- state machine ---
   val stateQ = RegInit(State.init)
